@@ -36,9 +36,22 @@ int main() {
 
 	Cube c(cubeMat);
 
-	c.R();
+	c.Scramble(3);
 
 	c.Print();
+
+	cout << endl << endl << "Solving..." << endl << endl;
+
+	vector<const char*> steps = c.Solve();
+
+	cout << endl << endl;
+
+	for (int i = 0; i < 20 && steps[i] != nullptr; ++i)
+	{
+		cout << steps[i] << ", ";
+	}
+
+	Cube::FreePdb();
 
 	cout << "Done!";
 }

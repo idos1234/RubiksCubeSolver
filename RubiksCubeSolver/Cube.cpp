@@ -1,9 +1,30 @@
 #include "cube.h"
 
+unsigned char* Cube::corners_pdb = nullptr;
 
-unsigned char* Cube::pdb = nullptr;
+void Cube::InitPdb()
+{
+    if (Cube::corners_pdb == nullptr)
+    {
+        Cube::corners_pdb = (unsigned char*)calloc(PDB_SIZE, sizeof(char));
+        if (Cube::corners_pdb == nullptr)
+        {
+            cerr << "Failed to allocate memory for PDB!" << endl;
+            exit(EXIT_FAILURE);
+        }
 
-Cube::Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0) {
+        memset(corners_pdb, 0xFF, 88179840);
+    }
+}
+
+void Cube::FreePdb() {
+    if (corners_pdb) {
+        free(corners_pdb);
+        corners_pdb = nullptr;
+    }
+}
+
+Cube::Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, nullptr) {
 	for (int i = 0; i < 6; ++i)
 	{
 		for (int j = 0; j < CUBESIZE; ++j)
@@ -16,6 +37,43 @@ Cube::Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0) {
 	}
 }
 
+Cube::Cube() {
+    char cubeMat[6][CUBESIZE][CUBESIZE] = {
+        {
+            {'w','w','w'},
+            {'w','w','w'},
+            {'w','w','w'}
+        },
+        {
+            {'g','g','g'},
+            {'g','g','g'},
+            {'g','g','g'}
+        },
+        {
+            {'r','r','r'},
+            {'r','r','r'},
+            {'r','r','r'}
+        },
+        {
+            {'b','b','b'},
+            {'b','b','b'},
+            {'b','b','b'}
+        },
+        {
+            {'o','o','o'},
+            {'o','o','o'},
+            {'o','o','o'}
+        },
+        {
+            {'y','y','y'},
+            {'y','y','y'},
+            {'y','y','y'}
+        },
+    };
+
+
+	*this = Cube(cubeMat);
+}
 
 void Cube::TurnClockWise(char side[CUBESIZE][CUBESIZE]) {
     char temp[CUBESIZE][CUBESIZE] = {};
@@ -61,191 +119,188 @@ void Cube::Turn180(char side[CUBESIZE][CUBESIZE]) {
 // --- R Moves (Right face - Red) ---
 void Cube::R() {
     TurnClockWise(cubeMat[2]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][2]; // Store Up edge
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][i][2] = cubeMat[1][i][2]; // Up <- Front
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][i][2] = cubeMat[5][i][2]; // Front <- Down
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][i][2] = cubeMat[3][CUBESIZE - 1 - i][0]; // Down <- Back (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][CUBESIZE - 1 - i][0] = temp[i]; // Back <- Up (flip)
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][CUBESIZE - 1];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[0][i][CUBESIZE - 1] = cubeMat[1][i][CUBESIZE - 1];
+        cubeMat[1][i][CUBESIZE - 1] = cubeMat[5][i][CUBESIZE - 1];
+        cubeMat[5][i][CUBESIZE - 1] = cubeMat[3][CUBESIZE - 1 - i][0];
+        cubeMat[3][CUBESIZE - 1 - i][0] = temp[i];
+    }
 }
-
 void Cube::R_P() {
     TurnCounterClockWise(cubeMat[2]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][2]; // Store Up edge
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][i][2] = cubeMat[3][CUBESIZE - 1 - i][0]; // Up <- Back (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][CUBESIZE - 1 - i][0] = cubeMat[5][i][2]; // Back <- Down (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][i][2] = cubeMat[1][i][2]; // Down <- Front
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][i][2] = temp[i]; // Front <- Up
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][CUBESIZE - 1];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[0][i][CUBESIZE - 1] = cubeMat[3][CUBESIZE - 1 - i][0];
+        cubeMat[3][CUBESIZE - 1 - i][0] = cubeMat[5][i][CUBESIZE - 1];
+        cubeMat[5][i][CUBESIZE - 1] = cubeMat[1][i][CUBESIZE - 1];
+        cubeMat[1][i][CUBESIZE - 1] = temp[i];
+    }
 }
-
 void Cube::R2() {
     Turn180(cubeMat[2]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[0][i][2], cubeMat[5][i][2]); // Up <-> Down
-        swap(cubeMat[1][i][2], cubeMat[3][CUBESIZE - 1 - i][0]); // Front <-> Back
+        std::swap(cubeMat[0][i][CUBESIZE - 1], cubeMat[5][i][CUBESIZE - 1]); // Up <-> Down
+        std::swap(cubeMat[1][i][CUBESIZE - 1], cubeMat[3][CUBESIZE - 1 - i][0]); // Front <-> Back (flipped)
     }
 }
 
 // --- L Moves (Left face - Orange) ---
 void Cube::L() {
     TurnClockWise(cubeMat[4]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0]; // Store Up edge
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][i][0] = cubeMat[3][CUBESIZE - 1 - i][2]; // Up <- Back (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][CUBESIZE - 1 - i][2] = cubeMat[5][i][0]; // Back <- Down (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][i][0] = cubeMat[1][i][0]; // Down <- Front
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][i][0] = temp[i]; // Front <- Up
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[0][i][0] = cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1];
+        cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1] = cubeMat[5][i][0];
+        cubeMat[5][i][0] = cubeMat[1][i][0];
+        cubeMat[1][i][0] = temp[i];
+    }
 }
-
 void Cube::L_P() {
     TurnCounterClockWise(cubeMat[4]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0]; // Store Up edge
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][i][0] = cubeMat[1][i][0]; // Up <- Front
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][i][0] = cubeMat[5][i][0]; // Front <- Down
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][i][0] = cubeMat[3][CUBESIZE - 1 - i][2]; // Down <- Back (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][CUBESIZE - 1 - i][2] = temp[i]; // Back <- Up (flip)
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[0][i][0] = cubeMat[1][i][0];
+        cubeMat[1][i][0] = cubeMat[5][i][0];
+        cubeMat[5][i][0] = cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1];
+        cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1] = temp[i];
+    }
 }
-
 void Cube::L2() {
     Turn180(cubeMat[4]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[0][i][0], cubeMat[5][i][0]); // Up <-> Down
-        swap(cubeMat[1][i][0], cubeMat[3][CUBESIZE - 1 - i][2]); // Front <-> Back
+        std::swap(cubeMat[0][i][0], cubeMat[5][i][0]); // Up <-> Down
+        std::swap(cubeMat[1][i][0], cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1]); // Front <-> Back (flipped)
     }
 }
 
 // --- U Moves (Up face - White) ---
 void Cube::U() {
     TurnClockWise(cubeMat[0]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i]; // Store Front top row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][0][i] = cubeMat[2][0][i]; // Front <- Right
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][0][i] = cubeMat[3][0][i]; // Right <- Back
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][0][i] = cubeMat[4][0][i]; // Back <- Left
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][0][i] = temp[i]; // Left <- Front
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[1][0][i] = cubeMat[2][0][i];
+        cubeMat[2][0][i] = cubeMat[3][0][i];
+        cubeMat[3][0][i] = cubeMat[4][0][i];
+        cubeMat[4][0][i] = temp[i];
+    }
 }
-
 void Cube::U_P() {
     TurnCounterClockWise(cubeMat[0]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i]; // Store Front top row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][0][i] = cubeMat[4][0][i]; // Front <- Left
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][0][i] = cubeMat[3][0][i]; // Left <- Back
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][0][i] = cubeMat[2][0][i]; // Back <- Right
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][0][i] = temp[i]; // Right <- Front
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[1][0][i] = cubeMat[4][0][i];
+        cubeMat[4][0][i] = cubeMat[3][0][i];
+        cubeMat[3][0][i] = cubeMat[2][0][i];
+        cubeMat[2][0][i] = temp[i];
+    }
 }
-
 void Cube::U2() {
     Turn180(cubeMat[0]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[1][0][i], cubeMat[3][0][i]); // Front <-> Back
-        swap(cubeMat[2][0][i], cubeMat[4][0][i]); // Right <-> Left
+        std::swap(cubeMat[1][0][i], cubeMat[3][0][i]); // Front <-> Back
+        std::swap(cubeMat[2][0][i], cubeMat[4][0][i]); // Right <-> Left
     }
 }
 
 // --- D Moves (Down face - Yellow) ---
 void Cube::D() {
     TurnClockWise(cubeMat[5]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][2][i]; // Store Front bottom row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][2][i] = cubeMat[4][2][i]; // Front <- Left
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][2][i] = cubeMat[3][2][i]; // Left <- Back
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][2][i] = cubeMat[2][2][i]; // Back <- Right
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][2][i] = temp[i]; // Right <- Front
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][CUBESIZE - 1][i];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[1][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1][i];
+        cubeMat[4][CUBESIZE - 1][i] = cubeMat[3][CUBESIZE - 1][i];
+        cubeMat[3][CUBESIZE - 1][i] = cubeMat[2][CUBESIZE - 1][i];
+        cubeMat[2][CUBESIZE - 1][i] = temp[i];
+    }
 }
-
 void Cube::D_P() {
     TurnCounterClockWise(cubeMat[5]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][2][i]; // Store Front bottom row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[1][2][i] = cubeMat[2][2][i]; // Front <- Right
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][2][i] = cubeMat[3][2][i]; // Right <- Back
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[3][2][i] = cubeMat[4][2][i]; // Back <- Left
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][2][i] = temp[i]; // Left <- Front
+    char temp[CUBESIZE];
+    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][CUBESIZE - 1][i];
+    for (int i = 0; i < CUBESIZE; i++) {
+        cubeMat[1][CUBESIZE - 1][i] = cubeMat[2][CUBESIZE - 1][i];
+        cubeMat[2][CUBESIZE - 1][i] = cubeMat[3][CUBESIZE - 1][i];
+        cubeMat[3][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1][i];
+        cubeMat[4][CUBESIZE - 1][i] = temp[i];
+    }
 }
-
 void Cube::D2() {
     Turn180(cubeMat[5]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[1][2][i], cubeMat[3][2][i]); // Front <-> Back
-        swap(cubeMat[2][2][i], cubeMat[4][2][i]); // Right <-> Left
+        std::swap(cubeMat[1][CUBESIZE - 1][i], cubeMat[3][CUBESIZE - 1][i]); // Front <-> Back
+        std::swap(cubeMat[2][CUBESIZE - 1][i], cubeMat[4][CUBESIZE - 1][i]); // Right <-> Left
     }
 }
 
 // --- F Moves (Front face - Green) ---
 void Cube::F() {
     TurnClockWise(cubeMat[1]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][2][i]; // Store Up bottom row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][2][i] = cubeMat[4][CUBESIZE - 1 - i][2]; // Up <- Left column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][i][2] = cubeMat[5][0][i]; // Left <- Down top row
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][0][i] = cubeMat[2][CUBESIZE - 1 - i][0]; // Down <- Right column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][i][0] = temp[i]; // Right <- Up
+    for (int i = 0; i < CUBESIZE; i++) {
+        char tempVal = cubeMat[0][CUBESIZE - 1][i];
+        cubeMat[0][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1];
+        cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1] = cubeMat[5][0][CUBESIZE - 1 - i];
+        cubeMat[5][0][CUBESIZE - 1 - i] = cubeMat[2][i][0];
+        cubeMat[2][i][0] = tempVal;
+    }
 }
-
 void Cube::F_P() {
     TurnCounterClockWise(cubeMat[1]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][2][i]; // Store Up bottom row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][2][i] = cubeMat[2][i][0]; // Up <- Right column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][i][0] = cubeMat[5][0][CUBESIZE - 1 - i]; // Right <- Down top row (flip)
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][0][i] = cubeMat[4][i][2]; // Down <- Left column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][CUBESIZE - 1 - i][2] = temp[i]; // Left <- Up (flip)
+    for (int i = 0; i < CUBESIZE; i++) {
+        char tempVal = cubeMat[0][CUBESIZE - 1][i];
+        cubeMat[0][CUBESIZE - 1][i] = cubeMat[2][i][0];
+        cubeMat[2][i][0] = cubeMat[5][0][CUBESIZE - 1 - i];
+        cubeMat[5][0][CUBESIZE - 1 - i] = cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1];
+        cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1] = tempVal;
+    }
 }
-
 void Cube::F2() {
     Turn180(cubeMat[1]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[0][2][i], cubeMat[5][0][CUBESIZE - 1 - i]); // Up <-> Down
-        swap(cubeMat[2][i][0], cubeMat[4][CUBESIZE - 1 - i][2]); // Right <-> Left
+        std::swap(cubeMat[0][CUBESIZE - 1][i], cubeMat[5][0][CUBESIZE - 1 - i]); // Up (row) <-> Down (row flipped)
+        std::swap(cubeMat[2][i][0], cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1]); // Right (col) <-> Left (col flipped)
     }
 }
 
 // --- B Moves (Back face - Blue) ---
 void Cube::B() {
     TurnClockWise(cubeMat[3]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][0][i]; // Store Up top row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][0][i] = cubeMat[2][i][2]; // Up <- Right column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][i][2] = cubeMat[5][2][CUBESIZE - 1 - i]; // Right <- Down bottom row
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][2][i] = cubeMat[4][i][0]; // Down <- Left column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][i][0] = temp[CUBESIZE - 1 - i]; // Left <- Up top row
+    for (int i = 0; i < CUBESIZE; i++) {
+        char tempVal = cubeMat[0][0][i];
+        cubeMat[0][0][i] = cubeMat[2][i][CUBESIZE - 1];
+        cubeMat[2][i][CUBESIZE - 1] = cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i];
+        cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i] = cubeMat[4][CUBESIZE - 1 - i][0];
+        cubeMat[4][CUBESIZE - 1 - i][0] = tempVal;
+    }
 }
 
 void Cube::B_P() {
     TurnCounterClockWise(cubeMat[3]);
-    char temp[CUBESIZE] = {};
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][0][i]; // Store Up top row
-
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[0][0][i] = cubeMat[4][CUBESIZE - 1 - i][0]; // Up <- Left column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[4][i][0] = cubeMat[5][2][i]; // Left <- Down bottom row
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[5][2][i] = cubeMat[2][CUBESIZE - 1 - i][2]; // Down <- Right column
-    for (int i = 0; i < CUBESIZE; i++) cubeMat[2][i][2] = temp[i]; // Right <- Up
+    for (int i = 0; i < CUBESIZE; i++) {
+        char tempVal = cubeMat[0][0][i];
+        cubeMat[0][0][i] = cubeMat[4][CUBESIZE - 1 - i][0];
+        cubeMat[4][CUBESIZE - 1 - i][0] = cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i];
+        cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i] = cubeMat[2][i][CUBESIZE - 1];
+        cubeMat[2][i][CUBESIZE - 1] = tempVal;
+    }
 }
-
 void Cube::B2() {
     Turn180(cubeMat[3]);
     for (int i = 0; i < CUBESIZE; i++) {
-        swap(cubeMat[0][0][i], cubeMat[5][2][CUBESIZE - 1 - i]); // Up <-> Down
-        swap(cubeMat[2][i][2], cubeMat[4][CUBESIZE - 1 - i][0]); // Right <-> Left
+        std::swap(cubeMat[0][0][i], cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i]); // Up (row) <-> Down (row flipped)
+        std::swap(cubeMat[2][i][CUBESIZE - 1], cubeMat[4][CUBESIZE - 1 - i][0]); // Right (col) <-> Left (col flipped)
     }
 }
 
 void Cube::Scramble(int movesCount) {
-    srand(time(0)); // Seed for random generation
+    srand(static_cast<unsigned int>(time(0))); // Seed for random generation
 
     int lastFace = -1; // To avoid moving the same face twice in a row
 
@@ -396,13 +451,28 @@ int Cube::CalcCornerPermutationIndex() {
 }
 
 void Cube::PDB_DFS(int turn) {
+
+    if(turn >= 20) {
+        return;
+	}
+
     //calculate array index
     int index = this->CalcCornerPermutationIndex();
 
+    if (index < 0 || index >= PDB_SIZE) {
+        return;
+    }
+
 
     //check if state already existed
-    if (this->pdb[index] != 0) {
+    if (Cube::corners_pdb[index] != 255) {
+        if(Cube::corners_pdb[index] > turn) {
+			Cube::corners_pdb[index] = turn;
+		}
         return;
+    }
+    else {
+        Cube::corners_pdb[index] = turn;
     }
 
 
@@ -484,5 +554,344 @@ void Cube::PDB_DFS(int turn) {
     this->F2();
     this->PDB_DFS(turn + 1);
     this->F2();
+
+}
+
+bool Cube::IsSolved() const {
+	for (int f = 0; f < 6; ++f) {
+		char color = this->cubeMat[f][0][0];
+		for (int i = 0; i < CUBESIZE; ++i) {
+			for (int j = 0; j < CUBESIZE; ++j) {
+				if (this->cubeMat[f][i][j] != color) {
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+bool Cube::SolveHelper(int turn) {
+    cout << turn << ": ";
+    for (int i = 0; i < turn; ++i) {
+        if(steps[i] != nullptr) {
+            cout << steps[i] << " ";
+		}
+	}
+	cout << endl;
+
+    if(this->IsSolved()) {
+        Cube::steps[turn] = nullptr;
+        return true;
+	}
+
+
+    if (turn >= 20) {
+        Cube::steps[turn - 1] = nullptr;
+        return false;
+	}
+
+    priority_queue<pair<int, char*>, vector<pair<int, char*>>, PairFirstComparator> minHeap_States;
+    int h = 0;
+    int index = 0;
+    char move[3];
+
+
+    //check for R
+	this->R();
+
+	index = this->CalcCornerPermutationIndex();
+	h = corners_pdb[index];
+
+	move[0] = 'R';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+	this->R_P();
+
+    //check for R_P
+    this->R_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'R';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->R();
+
+    //check for R2
+    this->R2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'R';
+	move[1] = '2';
+	move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->R2();
+
+    //check for L
+    this->L();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'L';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->L_P();
+
+    //check for L_P
+    this->L_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'L';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->L();
+
+    //check for L2
+    this->L2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'L';
+	move[1] = '2';
+	move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->L2();
+
+    //check for U
+    this->U();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'U';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->U_P();
+
+    //check for U_P
+    this->U_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'U';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->U();
+
+    //check for U2
+    this->U2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'U';
+	move[1] = '2';
+	move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->U2();
+
+    //check for D
+    this->D();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'D';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->D_P();
+
+    //check for D_P
+    this->D_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'D';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->D();
+
+    //check for D2
+    this->D2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'D';
+	move[1] = '2';
+	move[2] = '\0';
+    minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->D2();
+
+    //check for B
+    this->B();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'B';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->B_P();
+
+    //check for B_P
+    this->B_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'B';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->B();
+
+    //check for B2
+    this->B2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'B';
+	move[1] = '2';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->B2();
+
+    //check for F
+    this->F();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'F';
+	move[1] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->F_P();
+
+    //check for F_P
+    this->F_P();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+    move[0] = 'F';
+    move[1] = '\'';
+    move[2] = '\0';
+	minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->F();
+
+    //check for F2
+    this->F2();
+
+    index = this->CalcCornerPermutationIndex();
+    h = corners_pdb[index];
+
+	move[0] = 'F';
+	move[1] = '2';
+	move[2] = '\0';
+    minHeap_States.push(make_pair(h, _strdup(move)));
+
+    this->F2();
+
+
+
+    while (!minHeap_States.empty()) {
+		char* _move =  minHeap_States.top().second;
+		minHeap_States.pop();
+
+        if (strcmp(_move, "R") == 0) this->R();
+        else if (strcmp(_move, "R\'") == 0) this->R_P();
+        else if (strcmp(_move, "R2") == 0) this->R2();
+        else if (strcmp(_move, "L") == 0) this->L();
+        else if (strcmp(_move, "L\'") == 0) this->L_P();
+        else if (strcmp(_move, "L2") == 0) this->L2();
+        else if (strcmp(_move, "U") == 0) this->U();
+        else if (strcmp(_move, "U\'") == 0) this->U_P();
+        else if (strcmp(_move, "U2") == 0) this->U2();
+        else if (strcmp(_move, "D") == 0) this->D();
+        else if (strcmp(_move, "D\'") == 0) this->D_P();
+        else if (strcmp(_move, "D2") == 0) this->D2();
+        else if (strcmp(_move, "B") == 0) this->B();
+        else if (strcmp(_move, "B\'") == 0) this->B_P();
+        else if (strcmp(_move, "B2") == 0) this->B2();
+        else if (strcmp(_move, "F") == 0) this->F();
+        else if (strcmp(_move, "F\'") == 0) this->F_P();
+        else if (strcmp(_move, "F2") == 0) this->F2();
+
+        steps[turn] = _move;
+
+        if (this->SolveHelper(turn + 1)) {
+            return true;
+        }
+        else {
+            // ביטול המהלך (Undo)
+            if (strcmp(_move, "R") == 0) this->R_P();
+            else if (strcmp(_move, "R\'") == 0) this->R();
+            else if (strcmp(_move, "R2") == 0) this->R2();
+            else if (strcmp(_move, "L") == 0) this->L_P();
+            else if (strcmp(_move, "L\'") == 0) this->L();
+            else if (strcmp(_move, "L2") == 0) this->L2();
+            else if (strcmp(_move, "U") == 0) this->U_P();
+            else if (strcmp(_move, "U\'") == 0) this->U();
+            else if (strcmp(_move, "U2") == 0) this->U2();
+            else if (strcmp(_move, "D") == 0) this->D_P();
+            else if (strcmp(_move, "D\'") == 0) this->D();
+            else if (strcmp(_move, "D2") == 0) this->D2();
+            else if (strcmp(_move, "B") == 0) this->B_P();
+            else if (strcmp(_move, "B\'") == 0) this->B();
+            else if (strcmp(_move, "B2") == 0) this->B2();
+            else if (strcmp(_move, "F") == 0) this->F_P();
+            else if (strcmp(_move, "F\'") == 0) this->F();
+            else if (strcmp(_move, "F2") == 0) this->F2();
+        }
+    }
+
+	return false;
+}
+
+vector<const char*> Cube::Solve() {
+	Cube::InitPdb();
+    Cube c = Cube();
+	c.PDB_DFS(0);
+
+    if (SolveHelper(0)) {
+        return steps;
+    }
+    else {
+        return {"No solution found"};
+    }
+
 
 }
