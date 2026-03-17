@@ -7,7 +7,9 @@
 
 
 #define CUBESIZE 3
-#define PDB_SIZE 88179840
+#define CORNERS_PDB_SIZE 88179840
+#define EDGES_PDB_SIZE 42577920
+
 
 using namespace std;
 
@@ -25,6 +27,8 @@ private:
 
 	vector<const char*> steps;
 	static unsigned char* corners_pdb;
+	static unsigned char* edges_pdb_1;
+	static unsigned char* edges_pdb_2;
 
 public:
 	Cube();
@@ -39,14 +43,21 @@ private:
 	void TurnCounterClockWise(char side[CUBESIZE][CUBESIZE]);
 	void Turn180(char side[CUBESIZE][CUBESIZE]);
 
-	void PDB_DFS(int turn = 0);
 
+	//dfs for building the PDB for corners
+	void PDB_DFS_CORNERS(int turn = 0);
 	bool CornerComp(char a1, char b1, char c1, char a2, char b2, char c2);
-
-public:
-	//need to change this to private after testing
 	int FindCornerNum(char a, char b, char c);
 	int CalcCornerPermutationIndex();
+
+
+	bool EdgeComp(char a1, char b1, char a2, char b2);
+	int FindEdgeIndex(char a, char b);
+	int CalcEdgesIndex_1();
+	int CalcEdgesIndex_2();
+	void PDB_DFS_EDGES_1(int turn = 0);
+	void PDB_DFS_EDGES_2(int turn = 0);
+
 
 public:
 	void R();

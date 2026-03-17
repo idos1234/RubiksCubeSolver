@@ -1,9 +1,10 @@
-cpp RubiksCubeTests\RubiksCubeTests.cpp
-#include "pch.h"
 #include "CppUnitTest.h"
 #include "../RubiksCubeSolver/Cube.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
+
+// forward-declare the helper in Cube.cpp so tests can initialize combinations
+extern void precomputeCombinations();
 
 namespace RubiksCubeTests
 {
@@ -168,5 +169,48 @@ namespace RubiksCubeTests
                 Assert::IsTrue(id >= 0 && id < 8);
             }
         }
+
+        // --- New tests for edge helpers ---
+        TEST_METHOD(TestEdgeComp)
+        {
+            char solvedMat[6][3][3];
+            BuildSolvedMat(solvedMat);
+            Cube c(solvedMat);
+
+            // EdgeComp compares unordered pairs, so ('w','b') == ('b','w')
+            Assert::IsTrue(c.EdgeComp('w', 'b', 'b', 'w'));
+            // Different edges should not match
+            Assert::IsFalse(c.EdgeComp('w', 'b', 'g', 'r'));
+        }
+
+        TEST_METHOD(TestFindEdgeIndex_Solved)
+        {
+            char solvedMat[6][3][3];
+            BuildSolvedMat(solvedMat);
+            Cube c(solvedMat);
+
+            // In solved layout, (w,b) is the edge with index 0, (g,r) maps to index 6
+            Assert::AreEqual(0, c.FindEdgeIndex('w', 'b'));
+            Assert::AreEqual(6, c.FindEdgeIndex('g', 'r'));
+        }
+
+        TEST_METHOD(TestCalcEdgesIndex_1_Solved)
+        {
+            char solvedMat[6][3][3];
+            BuildSolvedMat(solvedMat);
+
+            // ensure combination table is populated the same way the solver expects
+            precomputeCombinations();
+
+            Cube c(solvedMat);
+            int idx = c.CalcEdgesIndex_1();
+
+            // With solved layout the computed index is deterministic.
+            // Based on the implementation combination/permutation/orientation the expected value is 552960.
+            // (combinationIndex = 12, permutationIndex = 0 -> indexPos = 8640, orientationIndex = 0 -> 8640*64 = 552960)
+            Assert::AreEqual(552960, idx);
+        }
+
+
     };
 }

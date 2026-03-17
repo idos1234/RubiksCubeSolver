@@ -34,9 +34,12 @@ int main() {
 		},
 	};
 
+
 	Cube c(cubeMat);
 
-	c.Scramble(3);
+	c.U();
+	c.F2();
+	c.D_P();
 
 	c.Print();
 
