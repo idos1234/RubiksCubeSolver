@@ -4,6 +4,11 @@ unsigned char* Cube::corners_pdb = nullptr;
 unsigned char* Cube::edges_pdb_1 = nullptr;
 unsigned char* Cube::edges_pdb_2 = nullptr;
 
+signed char Cube::EP_PERM[18][12];
+signed char Cube::EO_ORI[18][12];
+signed char Cube::CP_PERM[18][8];
+signed char Cube::CO_ORI[18][8];
+
 int C[13][7];
 
 void precomputeCombinations() {
@@ -58,7 +63,87 @@ void Cube::InitPdb()
         memset(edges_pdb_2, 0xFF, EDGES_PDB_SIZE);
     }
 
+    Cube::corners_pdb[0] = 0;
+	Cube::edges_pdb_1[0] = 0;
+    Cube::edges_pdb_2[0] = 0;
 
+
+}
+
+void Cube::ManualApplyMove(int face) {
+    // עזרים לביצוע החלפות (Swaps)
+    auto rotateCorners = [&](int c1, int c2, int c3, int c4) {
+        signed char temp_cp = cp[c1]; cp[c1] = cp[c2]; cp[c2] = cp[c3]; cp[c3] = cp[c4]; cp[c4] = temp_cp;
+        signed char temp_co = co[c1]; co[c1] = co[c2]; co[c2] = co[c3]; co[c3] = co[c4]; co[c4] = temp_co;
+        };
+    auto rotateEdges = [&](int e1, int e2, int e3, int e4) {
+        signed char temp_ep = ep[e1]; ep[e1] = ep[e2]; ep[e2] = ep[e3]; ep[e3] = ep[e4]; ep[e4] = temp_ep;
+        signed char temp_eo = eo[e1]; eo[e1] = eo[e2]; eo[e2] = eo[e3]; eo[e3] = eo[e4]; eo[e4] = temp_eo;
+        };
+
+    switch (face) {
+    case 0: // U (Up) - פאה עליונה (לבן)
+        rotateCorners(0, 1, 2, 3);
+        rotateEdges(0, 1, 2, 3);
+        break;
+    case 1: // D (Down) - פאה תחתונה (צהוב)
+        rotateCorners(4, 7, 6, 5);
+        rotateEdges(4, 7, 6, 5);
+        break;
+    case 2: // L (Left) - פאה שמאלית (כתום)
+        rotateCorners(0, 3, 4, 5);
+        rotateEdges(8, 11, 4, 9);
+        // שינוי אוריינטציה בפינות (בציר L/R האוריינטציה משתנה 1-2-1-2)
+        co[0] = (co[0] + 1) % 3; co[3] = (co[3] + 2) % 3;
+        co[4] = (co[4] + 1) % 3; co[5] = (co[5] + 2) % 3;
+        // בשיטת הקידוד הסטנדרטית, ב-L/R אין שינוי EO
+        break;
+    case 3: // R (Right) - פאה ימנית (אדום)
+        rotateCorners(1, 6, 7, 2);
+        rotateEdges(2, 6, 10, 1);
+        co[1] = (co[1] + 1) % 3; co[6] = (co[6] + 2) % 3;
+        co[7] = (co[7] + 1) % 3; co[2] = (co[2] + 2) % 3;
+        break;
+    case 4: // F (Front) - פאה קדמית (ירוק)
+        rotateCorners(2, 7, 4, 3);
+        rotateEdges(3, 7, 11, 8);
+        co[2] = (co[2] + 1) % 3; co[7] = (co[7] + 2) % 3;
+        co[4] = (co[4] + 1) % 3; co[3] = (co[3] + 2) % 3;
+        // שינוי EO במהלכי F/B
+        for (int e : {3, 7, 11, 8}) eo[e] = 1 - eo[e];
+        break;
+    case 5: // B (Back) - פאה אחורית (כחול)
+        rotateCorners(0, 5, 6, 1);
+        rotateEdges(1, 5, 9, 6);
+        co[0] = (co[0] + 1) % 3; co[5] = (co[5] + 2) % 3;
+        co[6] = (co[6] + 1) % 3; co[1] = (co[1] + 2) % 3;
+        for (int e : {1, 5, 9, 6}) eo[e] = 1 - eo[e];
+        break;
+    }
+}
+
+void Cube::InitMoveTables() {
+    for (int f = 0; f < 6; f++) {
+        for (int t = 1; t <= 3; t++) {
+            int moveIdx = f * 3 + (t - 1);
+
+            Cube temp;
+            
+            for (int i = 0; i < t; i++) {
+                temp.ManualApplyMove(f);
+            }
+
+            // copy results to move tables
+            for (int i = 0; i < 8; i++) {
+                CP_PERM[moveIdx][i] = temp.cp[i];
+                CO_ORI[moveIdx][i] = temp.co[i];
+            }
+            for (int i = 0; i < 12; i++) {
+                EP_PERM[moveIdx][i] = temp.ep[i];
+                EO_ORI[moveIdx][i] = temp.eo[i];
+            }
+        }
+    }
 }
 
 void Cube::FreePdb() {
@@ -68,279 +153,126 @@ void Cube::FreePdb() {
     }
 }
 
-Cube::Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, nullptr) {
-	for (int i = 0; i < 6; ++i)
-	{
-		for (int j = 0; j < CUBESIZE; ++j)
-		{
-			for (int k = 0; k < CUBESIZE; ++k)
-			{
-				this->cubeMat[i][j][k] = _cubeMat[i][j][k];
-			}
-		}
-	}
-}
-
-Cube::Cube() {
-    char cubeMat[6][CUBESIZE][CUBESIZE] = {
-        {
-            {'w','w','w'},
-            {'w','w','w'},
-            {'w','w','w'}
-        },
-        {
-            {'g','g','g'},
-            {'g','g','g'},
-            {'g','g','g'}
-        },
-        {
-            {'r','r','r'},
-            {'r','r','r'},
-            {'r','r','r'}
-        },
-        {
-            {'b','b','b'},
-            {'b','b','b'},
-            {'b','b','b'}
-        },
-        {
-            {'o','o','o'},
-            {'o','o','o'},
-            {'o','o','o'}
-        },
-        {
-            {'y','y','y'},
-            {'y','y','y'},
-            {'y','y','y'}
-        },
-    };
-
-
-	*this = Cube(cubeMat);
-}
-
-void Cube::TurnClockWise(char side[CUBESIZE][CUBESIZE]) {
-    char temp[CUBESIZE][CUBESIZE] = {};
-    // Copy to temp matrix with clockwise mapping: [i][j] -> [j][last-i]
-    for (int i = 0; i < CUBESIZE; i++) {
-        for (int j = 0; j < CUBESIZE; j++) {
-            temp[j][CUBESIZE - 1 - i] = side[i][j];
-        }
+Cube::Cube(const char cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, nullptr) {
+	// Identify corners and edges from the cubeMat
+    for (int i = 0; i < 8; i++) {
+        auto result = IdentifyCorner(cubeMat, i);
+        cp[i] = result.first;
+        co[i] = result.second;
     }
-    // Copy back to original face
-    for (int i = 0; i < CUBESIZE; i++) {
-        for (int j = 0; j < CUBESIZE; j++) {
-            side[i][j] = temp[i][j];
-        }
+
+	// Identify edges and their orientations
+    for (int i = 0; i < 12; i++) {
+        auto result = IdentifyEdge(cubeMat, i);
+        ep[i] = result.first;
+        eo[i] = result.second;
     }
 }
 
-void Cube::TurnCounterClockWise(char side[CUBESIZE][CUBESIZE]) {
-    char temp[CUBESIZE][CUBESIZE] = {};
-    // Copy to temp matrix with counter-clockwise mapping: [i][j] -> [last-j][i]
-    for (int i = 0; i < CUBESIZE; i++) {
-        for (int j = 0; j < CUBESIZE; j++) {
-            temp[CUBESIZE - 1 - j][i] = side[i][j];
-        }
+Cube::Cube() :numOfTurns(0), steps(20, nullptr) {
+	// each corner in its place, orientation 0
+    for (int i = 0; i < 8; i++) {
+        cp[i] = i;
+        co[i] = 0;
     }
-    // Copy back to original face
-    for (int i = 0; i < CUBESIZE; i++) {
-        for (int j = 0; j < CUBESIZE; j++) {
-            side[i][j] = temp[i][j];
-        }
+	// each edge in its place, orientation 0
+    for (int i = 0; i < 12; i++) {
+        ep[i] = i;
+        eo[i] = 0;
     }
 }
 
-void Cube::Turn180(char side[CUBESIZE][CUBESIZE]) {
-    // A 180-degree turn simply swaps elements across the center
-    // [0,0] swaps with [2,2], [0,1] with [2,1], etc.
-    for (int i = 0; i < (CUBESIZE * CUBESIZE) / 2; i++) {
-        swap(side[i / CUBESIZE][i % CUBESIZE],
-            side[CUBESIZE - 1 - i / CUBESIZE][CUBESIZE - 1 - i % CUBESIZE]);
+void Cube::ApplyMove(int face, int times) {
+    int moveIdx = face * 3 + (times - 1);
+
+    signed char next_cp[8], next_co[8];
+    signed char next_ep[12], next_eo[12];
+
+	//update corners in one step
+    for (int i = 0; i < 8; i++) {
+		int src = CP_PERM[moveIdx][i]; //from the move table, get the source index for this corner
+        next_cp[i] = cp[src];
+		// update orientation (add the value from the table modulo 3)
+        next_co[i] = (co[src] + CO_ORI[moveIdx][i]) % 3;
     }
+
+	// update edges in one step
+    for (int i = 0; i < 12; i++) {
+        int src = EP_PERM[moveIdx][i];
+        next_ep[i] = ep[src];
+		// update orientation (add the value from the table modulo 2)
+        next_eo[i] = (eo[src] + EO_ORI[moveIdx][i]) % 2;
+    }
+
+	// copy back the results to the cube's state
+    for (int i = 0; i < 8; i++) { cp[i] = next_cp[i]; co[i] = next_co[i]; }
+    for (int i = 0; i < 12; i++) { ep[i] = next_ep[i]; eo[i] = next_eo[i]; }
 }
 
 // --- R Moves (Right face - Red) ---
 void Cube::R() {
-    TurnClockWise(cubeMat[2]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][CUBESIZE - 1];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[0][i][CUBESIZE - 1] = cubeMat[1][i][CUBESIZE - 1];
-        cubeMat[1][i][CUBESIZE - 1] = cubeMat[5][i][CUBESIZE - 1];
-        cubeMat[5][i][CUBESIZE - 1] = cubeMat[3][CUBESIZE - 1 - i][0];
-        cubeMat[3][CUBESIZE - 1 - i][0] = temp[i];
-    }
+	this->ApplyMove(2, 1);
 }
 void Cube::R_P() {
-    TurnCounterClockWise(cubeMat[2]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][CUBESIZE - 1];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[0][i][CUBESIZE - 1] = cubeMat[3][CUBESIZE - 1 - i][0];
-        cubeMat[3][CUBESIZE - 1 - i][0] = cubeMat[5][i][CUBESIZE - 1];
-        cubeMat[5][i][CUBESIZE - 1] = cubeMat[1][i][CUBESIZE - 1];
-        cubeMat[1][i][CUBESIZE - 1] = temp[i];
-    }
+    this->ApplyMove(2, 2);
 }
 void Cube::R2() {
-    Turn180(cubeMat[2]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[0][i][CUBESIZE - 1], cubeMat[5][i][CUBESIZE - 1]); // Up <-> Down
-        std::swap(cubeMat[1][i][CUBESIZE - 1], cubeMat[3][CUBESIZE - 1 - i][0]); // Front <-> Back (flipped)
-    }
+    this->ApplyMove(2, 3);
 }
 
 // --- L Moves (Left face - Orange) ---
 void Cube::L() {
-    TurnClockWise(cubeMat[4]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[0][i][0] = cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1];
-        cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1] = cubeMat[5][i][0];
-        cubeMat[5][i][0] = cubeMat[1][i][0];
-        cubeMat[1][i][0] = temp[i];
-    }
+    this->ApplyMove(4, 1);
 }
 void Cube::L_P() {
-    TurnCounterClockWise(cubeMat[4]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[0][i][0];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[0][i][0] = cubeMat[1][i][0];
-        cubeMat[1][i][0] = cubeMat[5][i][0];
-        cubeMat[5][i][0] = cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1];
-        cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1] = temp[i];
-    }
+    this->ApplyMove(4, 2);
 }
 void Cube::L2() {
-    Turn180(cubeMat[4]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[0][i][0], cubeMat[5][i][0]); // Up <-> Down
-        std::swap(cubeMat[1][i][0], cubeMat[3][CUBESIZE - 1 - i][CUBESIZE - 1]); // Front <-> Back (flipped)
-    }
+    this->ApplyMove(4, 3);
 }
 
 // --- U Moves (Up face - White) ---
 void Cube::U() {
-    TurnClockWise(cubeMat[0]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[1][0][i] = cubeMat[2][0][i];
-        cubeMat[2][0][i] = cubeMat[3][0][i];
-        cubeMat[3][0][i] = cubeMat[4][0][i];
-        cubeMat[4][0][i] = temp[i];
-    }
+    this->ApplyMove(0, 1);
 }
 void Cube::U_P() {
-    TurnCounterClockWise(cubeMat[0]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][0][i];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[1][0][i] = cubeMat[4][0][i];
-        cubeMat[4][0][i] = cubeMat[3][0][i];
-        cubeMat[3][0][i] = cubeMat[2][0][i];
-        cubeMat[2][0][i] = temp[i];
-    }
+    this->ApplyMove(0, 2);
 }
 void Cube::U2() {
-    Turn180(cubeMat[0]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[1][0][i], cubeMat[3][0][i]); // Front <-> Back
-        std::swap(cubeMat[2][0][i], cubeMat[4][0][i]); // Right <-> Left
-    }
+    this->ApplyMove(0, 3);
 }
 
 // --- D Moves (Down face - Yellow) ---
 void Cube::D() {
-    TurnClockWise(cubeMat[5]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][CUBESIZE - 1][i];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[1][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1][i];
-        cubeMat[4][CUBESIZE - 1][i] = cubeMat[3][CUBESIZE - 1][i];
-        cubeMat[3][CUBESIZE - 1][i] = cubeMat[2][CUBESIZE - 1][i];
-        cubeMat[2][CUBESIZE - 1][i] = temp[i];
-    }
+    this->ApplyMove(5, 1);
 }
 void Cube::D_P() {
-    TurnCounterClockWise(cubeMat[5]);
-    char temp[CUBESIZE];
-    for (int i = 0; i < CUBESIZE; i++) temp[i] = cubeMat[1][CUBESIZE - 1][i];
-    for (int i = 0; i < CUBESIZE; i++) {
-        cubeMat[1][CUBESIZE - 1][i] = cubeMat[2][CUBESIZE - 1][i];
-        cubeMat[2][CUBESIZE - 1][i] = cubeMat[3][CUBESIZE - 1][i];
-        cubeMat[3][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1][i];
-        cubeMat[4][CUBESIZE - 1][i] = temp[i];
-    }
+    this->ApplyMove(5, 2);
 }
 void Cube::D2() {
-    Turn180(cubeMat[5]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[1][CUBESIZE - 1][i], cubeMat[3][CUBESIZE - 1][i]); // Front <-> Back
-        std::swap(cubeMat[2][CUBESIZE - 1][i], cubeMat[4][CUBESIZE - 1][i]); // Right <-> Left
-    }
+    this->ApplyMove(5, 3);
 }
 
 // --- F Moves (Front face - Green) ---
 void Cube::F() {
-    TurnClockWise(cubeMat[1]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        char tempVal = cubeMat[0][CUBESIZE - 1][i];
-        cubeMat[0][CUBESIZE - 1][i] = cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1];
-        cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1] = cubeMat[5][0][CUBESIZE - 1 - i];
-        cubeMat[5][0][CUBESIZE - 1 - i] = cubeMat[2][i][0];
-        cubeMat[2][i][0] = tempVal;
-    }
+    this->ApplyMove(1, 1);
 }
 void Cube::F_P() {
-    TurnCounterClockWise(cubeMat[1]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        char tempVal = cubeMat[0][CUBESIZE - 1][i];
-        cubeMat[0][CUBESIZE - 1][i] = cubeMat[2][i][0];
-        cubeMat[2][i][0] = cubeMat[5][0][CUBESIZE - 1 - i];
-        cubeMat[5][0][CUBESIZE - 1 - i] = cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1];
-        cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1] = tempVal;
-    }
+    this->ApplyMove(1, 2);
 }
 void Cube::F2() {
-    Turn180(cubeMat[1]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[0][CUBESIZE - 1][i], cubeMat[5][0][CUBESIZE - 1 - i]); // Up (row) <-> Down (row flipped)
-        std::swap(cubeMat[2][i][0], cubeMat[4][CUBESIZE - 1 - i][CUBESIZE - 1]); // Right (col) <-> Left (col flipped)
-    }
+    this->ApplyMove(1, 3);
 }
 
 // --- B Moves (Back face - Blue) ---
 void Cube::B() {
-    TurnClockWise(cubeMat[3]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        char tempVal = cubeMat[0][0][i];
-        cubeMat[0][0][i] = cubeMat[2][i][CUBESIZE - 1];
-        cubeMat[2][i][CUBESIZE - 1] = cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i];
-        cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i] = cubeMat[4][CUBESIZE - 1 - i][0];
-        cubeMat[4][CUBESIZE - 1 - i][0] = tempVal;
-    }
+    this->ApplyMove(3, 1);
 }
-
 void Cube::B_P() {
-    TurnCounterClockWise(cubeMat[3]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        char tempVal = cubeMat[0][0][i];
-        cubeMat[0][0][i] = cubeMat[4][CUBESIZE - 1 - i][0];
-        cubeMat[4][CUBESIZE - 1 - i][0] = cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i];
-        cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i] = cubeMat[2][i][CUBESIZE - 1];
-        cubeMat[2][i][CUBESIZE - 1] = tempVal;
-    }
+    this->ApplyMove(3, 2);
 }
 void Cube::B2() {
-    Turn180(cubeMat[3]);
-    for (int i = 0; i < CUBESIZE; i++) {
-        std::swap(cubeMat[0][0][i], cubeMat[5][CUBESIZE - 1][CUBESIZE - 1 - i]); // Up (row) <-> Down (row flipped)
-        std::swap(cubeMat[2][i][CUBESIZE - 1], cubeMat[4][CUBESIZE - 1 - i][0]); // Right (col) <-> Left (col flipped)
-    }
+    this->ApplyMove(3, 3);
 }
 
 void Cube::Scramble(int movesCount) {
@@ -383,40 +315,34 @@ void Cube::Scramble(int movesCount) {
     }
 }
 
-void Cube::Print() {
-    auto printFaceRow = [&](int face, int row) {
-        for (int col = 0; col < CUBESIZE; col++) {
-            cout << cubeMat[face][row][col] << " ";
-        }
-        };
+// corners
+pair<int, int> Cube::IdentifyCorner(const char mat[6][CUBESIZE][CUBESIZE], int position) {
+    char c1, c2, c3;
 
-    // Print Up
-    for (int i = 0; i < CUBESIZE; i++) {
-        cout << "          "; // Padding for Up face
-        printFaceRow(0, i);
-        cout << endl;
+    // identify the colors of the corner pieces based on their position in the cube
+    switch (position) {
+    case 0: c1 = mat[0][0][0]; c2 = mat[4][0][0]; c3 = mat[3][0][2]; break; // ULB
+    case 1: c1 = mat[0][0][2]; c2 = mat[2][0][2]; c3 = mat[3][0][0]; break; // URB
+    case 2: c1 = mat[0][2][2]; c2 = mat[1][0][2]; c3 = mat[2][0][0]; break; // URF
+    case 3: c1 = mat[0][2][0]; c2 = mat[1][0][0]; c3 = mat[4][0][2]; break; // ULF
+    case 4: c1 = mat[5][2][0]; c2 = mat[4][2][0]; c3 = mat[3][2][2]; break; // DLB
+    case 5: c1 = mat[5][2][2]; c2 = mat[2][2][2]; c3 = mat[3][2][0]; break; // DRB
+    case 6: c1 = mat[5][0][2]; c2 = mat[1][2][2]; c3 = mat[2][2][0]; break; // DRF
+    case 7: c1 = mat[5][0][0]; c2 = mat[1][2][0]; c3 = mat[4][2][2]; break; // DLF
+    default: c1 = ' '; c2 = ' '; c3 = ' '; break;
     }
-    cout << endl;
 
-    // Print Left, Front, Right, Back row
-    for (int i = 0; i < CUBESIZE; i++) {
-        printFaceRow(4, i); cout << "  "; // Left
-        printFaceRow(1, i); cout << "  "; // Front
-        printFaceRow(2, i); cout << "  "; // Right
-        printFaceRow(3, i); cout << "  "; // Back
-        cout << endl;
-    }
-    cout << endl;
+    // identify the corner piece based on its colors
+    int cornerId = FindCornerNum(c1, c2, c3);
 
-    // Print Down
-    for (int i = 0; i < CUBESIZE; i++) {
-        cout << "          ";
-        printFaceRow(5, i);
-        cout << endl;
-    }
-    cout << "-----------------------" << endl;
+    // identify the orientation of the corner piece based on the position of the white or yellow color
+    int orientation = 0;
+    if (c1 == 'W' || c1 == 'Y') orientation = 0;
+    else if (c2 == 'W' || c2 == 'Y') orientation = 1;
+    else orientation = 2;
+
+    return { cornerId, orientation };
 }
-
 bool Cube::CornerComp(char a1, char b1, char c1, char a2, char b2, char c2) {
     //sort colors
     if (a1 > b1) std::swap(a1, b1);
@@ -429,7 +355,6 @@ bool Cube::CornerComp(char a1, char b1, char c1, char a2, char b2, char c2) {
 
     return (a1 == a2 && b1 == b2 && c1 == c2);
 }
-
 int Cube::FindCornerNum(char a, char b, char c) {
     if (this->CornerComp(a, b, c, 'w', 'b', 'o')) {
         return 0;
@@ -458,149 +383,101 @@ int Cube::FindCornerNum(char a, char b, char c) {
 
     return -1;
 }
-
-int Cube::CalcCornerPermutationIndex() {
+void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
     int indexes[8] = {};
+	int biggerCount[8] = {};
 
-    indexes[0] = FindCornerNum(this->cubeMat[0][0][0], this->cubeMat[4][0][0], this->cubeMat[3][0][2]);
-    indexes[1] = FindCornerNum(this->cubeMat[0][0][2], this->cubeMat[2][0][2], this->cubeMat[3][0][0]);
-    indexes[2] = FindCornerNum(this->cubeMat[0][2][2], this->cubeMat[1][0][2], this->cubeMat[2][0][0]);
-    indexes[3] = FindCornerNum(this->cubeMat[0][2][0], this->cubeMat[1][0][0], this->cubeMat[4][0][2]);
-    indexes[4] = FindCornerNum(this->cubeMat[5][2][0], this->cubeMat[4][2][0], this->cubeMat[3][2][2]);
-    indexes[5] = FindCornerNum(this->cubeMat[5][2][2], this->cubeMat[2][2][2], this->cubeMat[3][2][0]);
-    indexes[6] = FindCornerNum(this->cubeMat[5][0][2], this->cubeMat[1][2][2], this->cubeMat[2][2][0]);
-    indexes[7] = FindCornerNum(this->cubeMat[5][0][0], this->cubeMat[1][2][0], this->cubeMat[4][2][2]);
+	vector<int> numbers = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
-
-    int index = 0;
+	//calculate the count of bigger numbers for each position in the permutation from the index
+    static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 1 };
     for (int i = 0; i < 8; ++i)
     {
-        int count = 0;
-        int factorial = 1;
+        biggerCount[i] = index / facts[i];
+        index = index % facts[i];
+    }
 
-        for (int j = i + 1; j < 8; ++j)
+	// reconstruct the corner permutation from the index
+    for (int i = 0; i < 8; ++i)
+    {
+		int count = biggerCount[i];
+        indexes[i] = numbers[count];
+		numbers.erase(numbers.begin() + count);
+    }
+
+	//generate child states for each possible move
+    for (int m = 0; m < 18; ++m)
+    {
+        int child_cp[8];
+
+		//apply the move to the corners
+        for (int i = 0; i < 8; ++i) {
+            child_cp[i] = indexes[CP_PERM[m][i]];
+        }
+
+
+		//calculate the index of the child state
+		int childIndex = 0;
+
+        for (int i = 0; i < 8; ++i)
         {
-            factorial *= 8 - j;
-            if (indexes[j] < indexes[i]) {
+            int count = 0;
+            static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
+
+            for (int j = i + 1; j < 8; ++j)
+            {
+                if (child_cp[j] < child_cp[i]) {
+                    ++count;
+                }
+            }
+
+            childIndex += (count * facts[i]);
+        }
+
+		//update index in PDB if not visited before
+        if (Cube::corners_pdb[childIndex] == 255) {
+            Cube::corners_pdb[childIndex] = turn + 1;
+        }
+    }
+}
+int Cube::CalcCornerPermutationIndex() {
+    int index = 0;
+    // מערך עצרות מוכן מראש: 7!, 6!, 5!, 4!, 3!, 2!, 1!, 0!
+    static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
+
+    for (int i = 0; i < 8; ++i) {
+        int count = 0;
+        for (int j = i + 1; j < 8; ++j) {
+            if (cp[j] < cp[i]) {
                 ++count;
             }
         }
-
-        index += (count * factorial);
-
+        index += (count * facts[i]);
     }
 
     return index;
-
 }
 
-void Cube::PDB_DFS_CORNERS(int turn) {
+void Cube::PDB_BFS_CORNERS() {
+    bool foundNew = true;
+    int turn = 0;
 
-    if(turn >= 20) {
-        return;
-	}
+    while(foundNew)
+    {
+		foundNew = false;
+        for (int i = 0; i < CORNERS_PDB_SIZE; ++i)
+        {
+            if (Cube::corners_pdb[i] == turn) {
+                Cube::UpdateTurnForChildren_Corners(turn, i);
+				foundNew = true;
+            }
+        }
 
-    //calculate array index
-    int index = this->CalcCornerPermutationIndex();
-
-    if (index < 0 || index >= CORNERS_PDB_SIZE) {
-        return;
+		++turn;
     }
-
-
-    //check if state already existed
-    if (Cube::corners_pdb[index] != 255) {
-        if(Cube::corners_pdb[index] > turn) {
-			Cube::corners_pdb[index] = turn;
-		}
-        return;
-    }
-    else {
-        Cube::corners_pdb[index] = turn;
-    }
-
-
-
-    //R
-    this->R();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->R_P();
-
-    this->R_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->R();
-
-    this->R2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->R2();
-
-    //L
-    this->L();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->L_P();
-
-    this->L_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->L();
-
-    this->L2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->L2();
-
-    //U
-    this->U();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->U_P();
-
-    this->U_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->U();
-
-    this->U2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->U2();
-
-    //D
-    this->D();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->D_P();
-
-    this->D_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->D();
-
-    this->D2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->D2();
-
-    //B
-    this->B();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->B_P();
-
-    this->B_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->B();
-
-    this->B2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->B2();
-
-    //F
-    this->F();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->F_P();
-
-    this->F_P();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->F();
-
-    this->F2();
-    this->PDB_DFS_CORNERS(turn + 1);
-    this->F2();
-
 }
 
+// edges
 bool Cube::EdgeComp(char a1, char b1, char a2, char b2) {
     //sort colors
     if (a1 > b1) std::swap(a1, b1);
@@ -608,512 +485,506 @@ bool Cube::EdgeComp(char a1, char b1, char a2, char b2) {
 
 	return (a1 == a2 && b1 == b2);
 }
+int Cube::FindEdgeNum(char a, char b) {
+	//white edges (U layer)
+    if (EdgeComp(a, b, 'W', 'B')) return 0; // UB
+    if (EdgeComp(a, b, 'W', 'R')) return 1; // UR
+    if (EdgeComp(a, b, 'W', 'G')) return 2; // UF
+    if (EdgeComp(a, b, 'W', 'O')) return 3; // UL
 
-int Cube::FindEdgeIndex(char a, char b) {
-    if(EdgeComp(a, b, cubeMat[0][0][1], cubeMat[3][0][1])) {
-        return 0;
-    }
-    else if(EdgeComp(a, b, cubeMat[0][1][2], cubeMat[2][0][1])) {
-        return 1;
-    }
-    else if(EdgeComp(a, b, cubeMat[0][2][1], cubeMat[1][0][1])) {
-        return 2;
-    }
-    else if(EdgeComp(a, b, cubeMat[0][1][0], cubeMat[4][0][1])) {
-        return 3;
-    }
-    else if(EdgeComp(a, b, cubeMat[5][2][1], cubeMat[3][2][1])) {
-        return 4;
-    }
-    else if(EdgeComp(a, b, cubeMat[5][1][2], cubeMat[2][2][1])) {
-        return 5;
-    }
-    else if(EdgeComp(a, b, cubeMat[5][0][1], cubeMat[1][2][1])) {
-        return 6;
-    }
-    else if(EdgeComp(a, b, cubeMat[5][1][0], cubeMat[4][2][1])) {
-        return 7;
-    }
-    else if(EdgeComp(a, b, cubeMat[1][1][0], cubeMat[4][1][2])) {
-        return 8;
-    }
-    else if(EdgeComp(a, b, cubeMat[1][1][2], cubeMat[2][1][0])) {
-        return 9;
-    }
-    else if(EdgeComp(a, b, cubeMat[3][1][2], cubeMat[4][1][0])) {
-        return 10;
-    }
-    else if(EdgeComp(a, b, cubeMat[3][1][0], cubeMat[2][1][2])) {
-        return 11;
-	}
+	//yellow edges (D layer)
+    if (EdgeComp(a, b, 'Y', 'B')) return 4; // DB
+    if (EdgeComp(a, b, 'Y', 'R')) return 5; // DR
+    if (EdgeComp(a, b, 'Y', 'G')) return 6; // DF
+    if (EdgeComp(a, b, 'Y', 'O')) return 7; // DL
+
+	//middle layer edges
+    if (EdgeComp(a, b, 'O', 'B')) return 8; // BL
+    if (EdgeComp(a, b, 'R', 'B')) return 9; // BR
+    if (EdgeComp(a, b, 'R', 'G')) return 10; // FR
+    if (EdgeComp(a, b, 'O', 'G')) return 11; // FL
 
     return -1;
 }
-
 int Cube::CalcEdgesIndex_1() {
-	// calculate combination index of the 6 edges in the first group
-    int indexes[6];
-	indexes[0] = FindEdgeIndex('w', 'b');
-	indexes[1] = FindEdgeIndex('w', 'r');
-	indexes[2] = FindEdgeIndex('w', 'g');
-	indexes[3] = FindEdgeIndex('w', 'o');
-	indexes[4] = FindEdgeIndex('b', 'o');
-    indexes[5] = FindEdgeIndex('b', 'r');
+	    int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
+	    int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
+        int orientations[6];
+        int found = 0;
 
-	sort(indexes, indexes + 6);
-	int combinationIndex = 0;
+        // סריקת כל 12 המקומות בקובייה
+        for (int i = 0; i < 12; i++) {
+            if (ep[i] >= 0 && ep[i] <= 5) {
+                occupiedPositions[found] = i;
+                edgeIDs[found] = ep[i];
+                orientations[found] = eo[i];
+                found++;
+            }
+        }
 
-    for (int i = 0; i < 6; ++i)
-    {
-		combinationIndex += C[indexes[i]][6-i];
-	}
+	    int combinationIndex = 0;
 
-	// calculate permutation index of the 6 edges in the first group
-	int permutationIndex = 0;
-
-    for (int i = 0; i < 6; ++i)
-    {
-        int count = 0;
-		int factorial = 1;
-        for (int j = i + 1; j < 6; ++j)
+        for (int i = 0; i < 6; ++i)
         {
-            factorial *= 6 - j;
-            if (indexes[j] < indexes[i]) {
-                ++count;
+		    combinationIndex += C[occupiedPositions[i]][i + 1];
+	    }
+
+	    // calculate permutation index of the 6 edges in the first group
+	    int permutationIndex = 0;
+
+        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
+        for (int i = 0; i < 6; ++i)
+        {
+            int count = 0;
+            for (int j = i + 1; j < 6; ++j)
+            {
+                if (edgeIDs[j] < edgeIDs[i]) {
+                    ++count;
+                }
             }
+            permutationIndex += (count * facts[i]);
         }
-		permutationIndex += (count * factorial);
+
+        // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
+	    int indexPos = combinationIndex * 720 + permutationIndex;
+
+	    //calculate orientation index of the 6 edges in the first group
+	    int orientationIndex = 0;
+        int PowerOf2 = 1;
+
+        for (int i = 0; i < 6; ++i)
+        {
+            orientationIndex += orientations[i] * PowerOf2;
+            PowerOf2 *= 2;
+        }
+
+        return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
     }
-
-    // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
-	int indexPos = combinationIndex * 720 + permutationIndex;
-
-	//calculate orientation index of the 6 edges in the first group
-	int orientationIndex = 0;
-    int factorial = 32;
-
-    for (int i = 0; i < 6; ++i)
-    {
-		char edgeColor1, edgeColor2;
-
-        switch (indexes[i]) {
-        case 0: // edge (w, b)
-            edgeColor1 = cubeMat[0][0][1];
-            edgeColor2 = cubeMat[3][0][1];
-            break;
-        case 1: // edge (w, r)
-            edgeColor1 = cubeMat[0][1][2];
-            edgeColor2 = cubeMat[2][0][1];
-            break;
-        case 2: // edge (w, g)
-            edgeColor1 = cubeMat[0][2][1];
-            edgeColor2 = cubeMat[1][0][1];
-            break;
-        case 3: // edge (w, o)
-            edgeColor1 = cubeMat[0][1][0];
-            edgeColor2 = cubeMat[4][0][1];
-            break;
-        case 4: // edge (b, o)
-            edgeColor1 = cubeMat[5][2][1];
-            edgeColor2 = cubeMat[3][2][1];
-            break;
-        case 5: // edge (b, r)
-            edgeColor1 = cubeMat[5][1][2];
-            edgeColor2 = cubeMat[2][2][1];
-            break;
-        case 6: // edge (g, r)
-            edgeColor1 = cubeMat[5][0][1];
-            edgeColor2 = cubeMat[1][2][1];
-            break;
-        case 7: // edge (g, o)
-            edgeColor1 = cubeMat[5][1][0];
-            edgeColor2 = cubeMat[4][2][1];
-            break;
-        case 8: // edge (y, b)
-            edgeColor1 = cubeMat[1][1][0];
-            edgeColor2 = cubeMat[4][1][2];
-            break;
-        case 9: // edge (y, r)
-            edgeColor1 = cubeMat[1][1][2];
-            edgeColor2 = cubeMat[2][1][0];
-            break;
-        case 10: // edge (y, g)
-            edgeColor1 = cubeMat[3][1][2];
-            edgeColor2 = cubeMat[4][1][0];
-            break;
-        case 11: // edge (y, o)
-            edgeColor1 = cubeMat[3][1][0];
-            edgeColor2 = cubeMat[2][1][2];
-            break;
-        }
-        
-		// Determine orientation based on the position of the colors
-        if (edgeColor1 == 'w' || edgeColor1 == 'y' || edgeColor2 == 'w' || edgeColor2 == 'y') {
-            if (edgeColor2 == 'w' || edgeColor2 == 'y') {
-				orientationIndex += factorial; // Flip orientation
-            }
-        }
-
-        else if (edgeColor1 == 'b' || edgeColor1 == 'g' || edgeColor2 == 'b' || edgeColor2 == 'g') {
-            if (edgeColor2 == 'b' || edgeColor2 == 'g') {
-                orientationIndex += factorial; // Flip orientation
-            }
-        }
-
-        else if (edgeColor1 == 'r' || edgeColor1 == 'o' || edgeColor2 == 'r' || edgeColor2 == 'o') {
-            if (edgeColor2 == 'r' || edgeColor2 == 'o') {
-                orientationIndex += factorial; // Flip orientation
-            }
-        }
-
-		factorial /= 2; // Each edge has 2 possible orientations
-    }
-
-	return indexPos * 64 + orientationIndex; // Final index combining position and orientation
-}
-
 int Cube::CalcEdgesIndex_2() {
-    // calculate combination index of the 6 edges in the second group
-    int indexes[6];
-    indexes[0] = FindEdgeIndex('g', 'r');
-    indexes[1] = FindEdgeIndex('g', 'o');
-    indexes[2] = FindEdgeIndex('y', 'b');
-    indexes[3] = FindEdgeIndex('y', 'r');
-    indexes[4] = FindEdgeIndex('y', 'g');
-    indexes[5] = FindEdgeIndex('y', 'o');
+	    int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
+	    int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
+        int orientations[6];
+        int found = 0;
 
-    sort(indexes, indexes + 6);
-    int combinationIndex = 0;
+        // סריקת כל 12 המקומות בקובייה
+        for (int i = 0; i < 12; i++) {
+            if (ep[i] >= 6 && ep[i] <= 11) {
+                occupiedPositions[found] = i;
+                edgeIDs[found] = ep[i] - 6;
+                orientations[found] = eo[i];
+                found++;
+            }
+        }
 
-    for (int i = 0; i < 6; ++i)
-    {
-        combinationIndex += C[indexes[i]][6 - i];
-    }
+	    int combinationIndex = 0;
 
-    // calculate permutation index of the 6 edges in the second group
-    int permutationIndex = 0;
-
-    for (int i = 0; i < 6; ++i)
-    {
-        int count = 0;
-        int factorial = 1;
-        for (int j = i + 1; j < 6; ++j)
+        for (int i = 0; i < 6; ++i)
         {
-            factorial *= 6 - j;
-            if (indexes[j] < indexes[i]) {
-                ++count;
+		    combinationIndex += C[occupiedPositions[i]][i + 1];
+	    }
+
+	    // calculate permutation index of the 6 edges in the first group
+	    int permutationIndex = 0;
+
+        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
+        for (int i = 0; i < 6; ++i)
+        {
+            int count = 0;
+            for (int j = i + 1; j < 6; ++j)
+            {
+                if (edgeIDs[j] < edgeIDs[i]) {
+                    ++count;
+                }
             }
+            permutationIndex += (count * facts[i]);
         }
-        permutationIndex += (count * factorial);
+
+        // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
+	    int indexPos = combinationIndex * 720 + permutationIndex;
+
+	    //calculate orientation index of the 6 edges in the first group
+	    int orientationIndex = 0;
+        int PowerOf2 = 1;
+
+        for (int i = 0; i < 6; ++i)
+        {
+            orientationIndex += orientations[i] * PowerOf2;
+            PowerOf2 *= 2;
+        }
+
+        return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
     }
 
-    // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
-    int indexPos = combinationIndex * 720 + permutationIndex;
+void Cube::UpdateTurnForChildren_Edges1(int turn, int index) {
+	int currentOriIdx = index % 64;
+    int tempPosIdx = index / 64;
+    int currentPermIdx = tempPosIdx % 720;
+    int currentCombIdx = tempPosIdx / 720;
 
-    //calculate orientation index of the 6 edges in the second group
-    int orientationIndex = 0;
-    int factorial = 32;
+	// find the edge orientation from the index
+    int orientations[6] = {};
 
     for (int i = 0; i < 6; ++i)
     {
-        char edgeColor1, edgeColor2;
+        orientations[i] = currentOriIdx % 2;
+		currentOriIdx /= 2;
+    }
 
-        switch (indexes[i]) {
-        case 0: // edge (w, b)
-            edgeColor1 = cubeMat[0][0][1];
-            edgeColor2 = cubeMat[3][0][1];
-            break;
-        case 1: // edge (w, r)
-            edgeColor1 = cubeMat[0][1][2];
-            edgeColor2 = cubeMat[2][0][1];
-            break;
-        case 2: // edge (w, g)
-            edgeColor1 = cubeMat[0][2][1];
-            edgeColor2 = cubeMat[1][0][1];
-            break;
-        case 3: // edge (w, o)
-            edgeColor1 = cubeMat[0][1][0];
-            edgeColor2 = cubeMat[4][0][1];
-            break;
-        case 4: // edge (b, o)
-            edgeColor1 = cubeMat[5][2][1];
-            edgeColor2 = cubeMat[3][2][1];
-            break;
-        case 5: // edge (b, r)
-            edgeColor1 = cubeMat[5][1][2];
-            edgeColor2 = cubeMat[2][2][1];
-            break;
-        case 6: // edge (g, r)
-            edgeColor1 = cubeMat[5][0][1];
-            edgeColor2 = cubeMat[1][2][1];
-            break;
-        case 7: // edge (g, o)
-            edgeColor1 = cubeMat[5][1][0];
-            edgeColor2 = cubeMat[4][2][1];
-            break;
-        case 8: // edge (y, b)
-            edgeColor1 = cubeMat[1][1][0];
-            edgeColor2 = cubeMat[4][1][2];
-            break;
-        case 9: // edge (y, r)
-            edgeColor1 = cubeMat[1][1][2];
-            edgeColor2 = cubeMat[2][1][0];
-            break;
-        case 10: // edge (y, g)
-            edgeColor1 = cubeMat[3][1][2];
-            edgeColor2 = cubeMat[4][1][0];
-            break;
-        case 11: // edge (y, o)
-            edgeColor1 = cubeMat[3][1][0];
-            edgeColor2 = cubeMat[2][1][2];
-            break;
+	// find the ocupied edges from the index
+	int ocupiedEdges[6] = {};
+    int k = 6;
+    for (int i = 11; i >= 0 && k > 0; --i)
+    {
+        if (currentCombIdx >= C[i][k]) {
+            ocupiedEdges[k - 1] = i;
+            currentCombIdx -= C[i][k];
+            --k;
         }
+    }
 
-        // Determine orientation based on the position of the colors
-        if (edgeColor1 == 'w' || edgeColor1 == 'y' || edgeColor2 == 'w' || edgeColor2 == 'y') {
-            if (edgeColor2 == 'w' || edgeColor2 == 'y') {
-                orientationIndex += factorial; // Flip orientation
+
+    //recreate the edges premutation
+    int permutations[6] = {};
+
+    vector<int> numbers = { 0, 1, 2, 3, 4, 5};
+
+    int tempPerm = currentPermIdx;
+	int factorial = 120; // 5!
+
+    //calculate the count of bigger numbers for each position in the permutation
+    for (int i = 0; i < 6; ++i)
+    {
+        int count = tempPerm / factorial;
+        tempPerm %= factorial;
+
+
+		permutations[i] = numbers[count];
+		numbers.erase(numbers.begin() + count);
+
+        if (i < 5) factorial /= (5 - i);
+    }
+
+
+
+    // build cube based on the premutations and orientations
+    int cube_ep[12] = {};
+    int cube_eo[12] = {};
+    for (int i = 0; i < 12; i++) { cube_ep[i] = -1; cube_eo[i] = 0; }
+
+    for (int i = 0; i < 6; ++i)
+    {
+        cube_ep[ocupiedEdges[i]] = permutations[i];
+        cube_eo[ocupiedEdges[i]] = orientations[i];
+    }
+
+
+	//generate child states for each possible move
+    for (int m = 0; m < 18; ++m) {
+        int next_ep[12];
+        int next_eo[12];
+
+        // make move
+        for (int i = 0; i < 12; ++i) {
+            int src = EP_PERM[m][i];
+            next_ep[i] = cube_ep[src];
+
+			// update orientation if the edge is in the first group and the move affects its orientation
+            if (cube_ep[src] != -1) {
+                next_eo[i] = (cube_eo[src] + EO_ORI[m][i]) % 2;
+            }
+            else {
+                next_eo[i] = -1;
             }
         }
 
-        else if (edgeColor1 == 'b' || edgeColor1 == 'g' || edgeColor2 == 'b' || edgeColor2 == 'g') {
-            if (edgeColor2 == 'b' || edgeColor2 == 'g') {
-                orientationIndex += factorial; // Flip orientation
+		// identify the occupied edges, their permutations and orientations for the child state
+        int next_occupied[6] = {};
+        int next_permutations[6] = {};
+        int next_orientations[6] = {};
+        int found = 0;
+
+        for (int i = 0; i < 12; ++i) {
+            if (next_ep[i] >= 0 && next_ep[i] <= 5) {
+                next_occupied[found] = i;
+                next_permutations[found] = next_ep[i];
+                next_orientations[found] = next_eo[i];
+                ++found;
             }
         }
 
-        else if (edgeColor1 == 'r' || edgeColor1 == 'o' || edgeColor2 == 'r' || edgeColor2 == 'o') {
-            if (edgeColor2 == 'r' || edgeColor2 == 'o') {
-                orientationIndex += factorial; // Flip orientation
+        // caculate the index of the child state
+
+		//combination
+        int childComb = 0;
+        for (int i = 0; i < 6; ++i) {
+            childComb += C[next_occupied[i]][i + 1];
+        }
+
+		// permutation
+        int childPerm = 0;
+        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
+
+        for (int i = 0; i < 6; ++i) {
+            int count = 0;
+            for (int j = i + 1; j < 6; ++j) {
+                if (next_permutations[j] < next_permutations[i]) count++;
+            }
+            childPerm += count * facts[i];
+        }
+
+		// orientation
+        int childOri = 0;
+        int powerOf2 = 1;
+        for (int i = 0; i < 6; i++) {
+            childOri += next_orientations[i] * powerOf2;
+            powerOf2 *= 2;
+        }
+
+		// final index for the child state
+        int childIndex = (childComb * 720 + childPerm) * 64 + childOri;
+
+		// update index in PDB if not visited before
+        if (Cube::edges_pdb_1[childIndex] == 255) {
+            Cube::edges_pdb_1[childIndex] = turn + 1;
+        }
+    }
+
+
+}
+void Cube::UpdateTurnForChildren_Edges2(int turn, int index) {
+    int currentOriIdx = index % 64;
+    int tempPosIdx = index / 64;
+    int currentPermIdx = tempPosIdx % 720;
+    int currentCombIdx = tempPosIdx / 720;
+
+    // find the edge orientation from the index
+    int orientations[6] = {};
+
+    for (int i = 0; i < 6; ++i)
+    {
+        orientations[i] = currentOriIdx % 2;
+        currentOriIdx /= 2;
+    }
+
+    // find the ocupied edges from the index
+    int ocupiedEdges[6] = {};
+    int k = 6;
+    for (int i = 11; i >= 0 && k > 0; --i)
+    {
+        if (currentCombIdx >= C[i][k]) {
+            ocupiedEdges[k - 1] = i;
+            currentCombIdx -= C[i][k];
+            --k;
+        }
+    }
+
+
+    //recreate the edges premutation
+    int permutations[6] = {};
+
+    vector<int> numbers = { 6, 7, 8, 9, 10, 11 };
+
+    int tempPerm = currentPermIdx;
+    int factorial = 120; // 5!
+
+    //calculate the count of bigger numbers for each position in the permutation
+    for (int i = 0; i < 6; ++i)
+    {
+        int count = tempPerm / factorial;
+        tempPerm %= factorial;
+
+
+        permutations[i] = numbers[count];
+        numbers.erase(numbers.begin() + count);
+
+        if (i < 5) factorial /= (5 - i);
+    }
+
+
+
+    // build cube based on the premutations and orientations
+    int cube_ep[12] = {};
+    int cube_eo[12] = {};
+    for (int i = 0; i < 12; i++) { cube_ep[i] = -1; cube_eo[i] = 0; }
+
+    for (int i = 0; i < 6; ++i)
+    {
+        cube_ep[ocupiedEdges[i]] = permutations[i];
+        cube_eo[ocupiedEdges[i]] = orientations[i];
+    }
+
+
+    //generate child states for each possible move
+    for (int m = 0; m < 18; ++m) {
+        int next_ep[12];
+        int next_eo[12];
+
+        // make move
+        for (int i = 0; i < 12; ++i) {
+            int src = EP_PERM[m][i];
+            next_ep[i] = cube_ep[src];
+
+            // update orientation if the edge is in the first group and the move affects its orientation
+            if (cube_ep[src] != -1) {
+                next_eo[i] = (cube_eo[src] + EO_ORI[m][i]) % 2;
+            }
+            else {
+                next_eo[i] = -1;
             }
         }
 
-        factorial /= 2; // Each edge has 2 possible orientations
-    }
+        // identify the occupied edges, their permutations and orientations for the child state
+        int next_occupied[6];
+        int next_permutations[6];
+        int next_orientations[6];
+        int found = 0;
 
-    return indexPos * 64 + orientationIndex; // Final index combining position and orientation
-}
-
-void Cube::PDB_DFS_EDGES_1(int turn) {
-    if (turn >= 20) {
-        return;
-    }
-
-    //calculate array index
-    int index = this->CalcEdgesIndex_1();
-
-    if (index < 0 || index >= EDGES_PDB_SIZE) {
-        return;
-    }
-
-    //check if state already existed
-    if (Cube::edges_pdb_1[index] != 255) {
-        if (Cube::edges_pdb_1[index] > turn) {
-            Cube::edges_pdb_1[index] = turn;
+        for (int i = 0; i < 12; ++i) {
+            if (next_ep[i] >= 6 && next_ep[i] <= 11) {
+                next_occupied[found] = i;
+                next_permutations[found] = next_ep[i] - 6;
+                next_orientations[found] = next_eo[i];
+                found++;
+            }
         }
-        return;
-    }
-    else {
-        Cube::edges_pdb_1[index] = turn;
-    }
 
-    //R
-    this->R();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->R_P();
+        // caculate the index of the child state
 
-    this->R_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->R();
-
-    this->R2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->R2();
-
-    //L
-    this->L();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->L_P();
-
-    this->L_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->L();
-
-    this->L2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->L2();
-
-    //U
-    this->U();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->U_P();
-
-    this->U_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->U();
-
-    this->U2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->U2();
-
-    //D
-    this->D();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->D_P();
-
-    this->D_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->D();
-
-    this->D2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->D2();
-
-    //B
-    this->B();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->B_P();
-
-    this->B_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->B();
-
-    this->B2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->B2();
-
-    //F
-    this->F();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->F_P();
-
-    this->F_P();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->F();
-
-    this->F2();
-    this->PDB_DFS_EDGES_1(turn + 1);
-    this->F2();
-
-}
-
-void Cube::PDB_DFS_EDGES_2(int turn) {
-    if (turn >= 20) {
-        return;
-    }
-
-    //calculate array index
-    int index = this->CalcEdgesIndex_2();
-
-    if (index < 0 || index >= EDGES_PDB_SIZE) {
-        return;
-    }
-
-    //check if state already existed
-    if (Cube::edges_pdb_2[index] != 255) {
-        if (Cube::edges_pdb_2[index] > turn) {
-            Cube::edges_pdb_2[index] = turn;
+        //combination
+        int childComb = 0;
+        for (int i = 0; i < 6; ++i) {
+            childComb += C[next_occupied[i]][i + 1];
         }
-        return;
+
+        // permutation
+        int childPerm = 0;
+        static const int facts[6] = { 120, 24, 6, 2, 1, 0 }; // מערך קבוע ומהיר
+
+        for (int i = 0; i < 6; ++i) {
+            int count = 0;
+            for (int j = i + 1; j < 6; ++j) {
+                if (next_permutations[j] < next_permutations[i]) count++;
+            }
+            childPerm += count * facts[i]; // הכפלה פשוטה במקום הנכון במערך
+        }
+
+        // orientation
+        int childOri = 0;
+        int powerOf2 = 1;
+        for (int i = 0; i < 6; i++) {
+            childOri += next_orientations[i] * powerOf2;
+            powerOf2 *= 2;
+        }
+
+        // final index for the child state
+        int childIndex = (childComb * 720 + childPerm) * 64 + childOri;
+
+        // update index in PDB if not visited before
+        if (Cube::edges_pdb_2[childIndex] == 255) {
+            Cube::edges_pdb_2[childIndex] = turn + 1;
+        }
     }
-    else {
-        Cube::edges_pdb_2[index] = turn;
-    }
-
-    //R
-    this->R();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->R_P();
-
-    this->R_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->R();
-
-    this->R2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->R2();
-
-    //L
-    this->L();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->L_P();
-
-    this->L_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->L();
-
-    this->L2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->L2();
-
-    //U
-    this->U();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->U_P();
-
-    this->U_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->U();
-
-    this->U2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->U2();
-
-    //D
-    this->D();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->D_P();
-
-    this->D_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->D();
-
-    this->D2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->D2();
-
-    //B
-    this->B();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->B_P();
-
-    this->B_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->B();
-
-    this->B2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->B2();
-
-    //F
-    this->F();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->F_P();
-
-    this->F_P();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->F();
-
-    this->F2();
-    this->PDB_DFS_EDGES_2(turn + 1);
-    this->F2();
-
 }
 
+
+void Cube::PDB_BFS_EDGES_1() {
+    bool foundNew = true;
+    int turn = 0;
+
+    while (foundNew)
+    {
+        foundNew = false;
+        for (int i = 0; i < EDGES_PDB_SIZE; ++i)
+        {
+            if (Cube::edges_pdb_1[i] == turn) {
+                Cube::UpdateTurnForChildren_Edges1(turn, i);
+                foundNew = true;
+            }
+        }
+
+        ++turn;
+    }
+}
+void Cube::PDB_BFS_EDGES_2() {
+    bool foundNew = true;
+    int turn = 0;
+
+    while (foundNew)
+    {
+        foundNew = false;
+        for (int i = 0; i < EDGES_PDB_SIZE; ++i)
+        {
+            if (Cube::edges_pdb_2[i] == turn) {
+                Cube::UpdateTurnForChildren_Edges2(turn, i);
+                foundNew = true;
+            }
+        }
+
+        ++turn;
+    }
+}
+
+pair<int, int> Cube::IdentifyEdge(const char mat[6][CUBESIZE][CUBESIZE], int position) {
+    char c1, c2;
+
+	//identify the two colors of the edge based on its position
+    switch (position) {
+    case 0:  c1 = mat[0][0][1]; c2 = mat[3][0][1]; break; // UB
+    case 1:  c1 = mat[0][1][2]; c2 = mat[2][0][1]; break; // UR
+    case 2:  c1 = mat[0][2][1]; c2 = mat[1][0][1]; break; // UF
+    case 3:  c1 = mat[0][1][0]; c2 = mat[4][0][1]; break; // UL
+    case 4:  c1 = mat[5][2][1]; c2 = mat[3][2][1]; break; // DB
+    case 5:  c1 = mat[5][1][2]; c2 = mat[2][2][1]; break; // DR
+    case 6:  c1 = mat[5][0][1]; c2 = mat[1][2][1]; break; // DF
+    case 7:  c1 = mat[5][1][0]; c2 = mat[4][2][1]; break; // DL
+    case 8:  c1 = mat[4][1][0]; c2 = mat[3][1][2]; break; // BL
+    case 9:  c1 = mat[2][1][2]; c2 = mat[3][1][0]; break; // BR
+    case 10: c1 = mat[2][1][0]; c2 = mat[1][1][2]; break; // FR
+    case 11: c1 = mat[4][1][2]; c2 = mat[1][1][0]; break; // FL
+    default: c1 = ' '; c2 = ' '; break;
+    }
+
+	//identify edge index based on its colors
+    int edgeId = Cube::FindEdgeNum(c1, c2);
+
+	// Determine orientation based on the position of the white or yellow sticker
+    int eo = 0;
+    if (c2 == 'W' || c2 == 'Y') {
+        eo = 1;
+    }
+    else if (c1 != 'W' && c1 != 'Y' && c2 != 'W' && c2 != 'Y') {
+        // קצוות שכבת האמצע (E-layer)
+        if (c2 == 'G' || c2 == 'B') eo = 1;
+    }
+
+    return { edgeId, eo };
+}
+
+// solution
 bool Cube::IsSolved() const {
-	for (int f = 0; f < 6; ++f) {
-		char color = this->cubeMat[f][0][0];
-		for (int i = 0; i < CUBESIZE; ++i) {
-			for (int j = 0; j < CUBESIZE; ++j) {
-				if (this->cubeMat[f][i][j] != color) {
-					return false;
-				}
-			}
-		}
-	}
-	return true;
+    for (int i = 0; i < 8; i++) {
+        if (cp[i] != i || co[i] != 0) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < 12; i++) {
+        if (ep[i] != i || eo[i] != 0) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
+int Cube::GetHeuristic() {
+    int h_corners = Cube::corners_pdb[CalcCornerPermutationIndex()];
+    int h_edges1 = Cube::edges_pdb_1[CalcEdgesIndex_1()];
+    int h_edges2 = Cube::edges_pdb_2[CalcEdgesIndex_2()];
+
+    // המחיר המינימלי להגעה לפתרון הוא לפחות הגדול מביניהם
+    return std::max({ h_corners, h_edges1, h_edges2 });
+}
 bool Cube::SolveHelper(int turn) {
     cout << turn << ": ";
     for (int i = 0; i < turn; ++i) {
@@ -1135,12 +1006,7 @@ bool Cube::SolveHelper(int turn) {
 	}
 
     priority_queue<pair<int, char*>, vector<pair<int, char*>>, PairFirstComparator> minHeap_States;
-    int h1 = 0;
-    int index1 = 0;
-    int h2 = 0;
-    int index2 = 0;
-    int h3 = 0;
-    int index3 = 0;
+    int h;
 
     char move[3];
 
@@ -1148,300 +1014,210 @@ bool Cube::SolveHelper(int turn) {
     //check for R
 	this->R();
 
-	index1 = this->CalcCornerPermutationIndex();
-	h1 = corners_pdb[index1];
-	index2 = this->CalcEdgesIndex_1();
-	h2 = edges_pdb_1[index2];
-	index3 = this->CalcEdgesIndex_2();
-	h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'R';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
 	this->R_P();
 
     //check for R_P
     this->R_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'R';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->R();
 
     //check for R2
     this->R2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'R';
 	move[1] = '2';
 	move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->R2();
 
     //check for L
     this->L();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'L';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->L_P();
 
     //check for L_P
     this->L_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'L';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->L();
 
     //check for L2
     this->L2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'L';
 	move[1] = '2';
 	move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->L2();
 
     //check for U
     this->U();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'U';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->U_P();
 
     //check for U_P
     this->U_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'U';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->U();
 
     //check for U2
     this->U2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'U';
 	move[1] = '2';
 	move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->U2();
 
     //check for D
     this->D();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'D';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->D_P();
 
     //check for D_P
     this->D_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'D';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->D();
 
     //check for D2
     this->D2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'D';
 	move[1] = '2';
 	move[2] = '\0';
-    minHeap_States.push(make_pair(h1, _strdup(move)));
+    minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->D2();
 
     //check for B
     this->B();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'B';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->B_P();
 
     //check for B_P
     this->B_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'B';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->B();
 
     //check for B2
     this->B2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'B';
 	move[1] = '2';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->B2();
 
     //check for F
     this->F();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'F';
 	move[1] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->F_P();
 
     //check for F_P
     this->F_P();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
     move[0] = 'F';
     move[1] = '\'';
     move[2] = '\0';
-	minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+	minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->F();
 
     //check for F2
     this->F2();
 
-    index1 = this->CalcCornerPermutationIndex();
-    h1 = corners_pdb[index1];
-    index2 = this->CalcEdgesIndex_1();
-    h2 = edges_pdb_1[index2];
-    index3 = this->CalcEdgesIndex_2();
-    h3 = edges_pdb_2[index3];
+    h = GetHeuristic();
 
 	move[0] = 'F';
 	move[1] = '2';
 	move[2] = '\0';
-    minHeap_States.push(make_pair(max(max(h1, h2), h3), _strdup(move)));
+    minHeap_States.push(make_pair(h, _strdup(move)));
 
     this->F2();
 
@@ -1505,9 +1281,9 @@ vector<const char*> Cube::Solve() {
     precomputeCombinations();
 
 	Cube::InitPdb();
-	Cube().PDB_DFS_CORNERS(0);
-    Cube().PDB_DFS_EDGES_1(0);
-    Cube().PDB_DFS_EDGES_2(0);
+	Cube().PDB_BFS_CORNERS();
+    Cube().PDB_BFS_EDGES_1();
+    Cube().PDB_BFS_EDGES_2();
 
     if (SolveHelper(0)) {
         return steps;

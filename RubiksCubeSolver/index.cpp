@@ -1,47 +1,46 @@
 #include "cube.h"
 
 int main() {
+	Cube::InitMoveTables();
+
+
 	char cubeMat[6][CUBESIZE][CUBESIZE] = {
 		{
-			{'w','w','w'},
-			{'w','w','w'},
-			{'w','w','w'}
+			{'W','W','W'},
+			{'W','W','W'},
+			{'W','W','W'}
 		},
 		{
-			{'g','g','g'},
-			{'g','g','g'},
-			{'g','g','g'}
+			{'G','G','G'},
+			{'G','G','G'},
+			{'G','G','G'}
 		},
 		{
-			{'r','r','r'},
-			{'r','r','r'},
-			{'r','r','r'}
+			{'R','R','R'},
+			{'R','R','R'},
+			{'R','R','R'}
 		},
 		{
-			{'b','b','b'},
-			{'b','b','b'},
-			{'b','b','b'}
+			{'B','B','B'},
+			{'B','B','B'},
+			{'B','B','B'}
 		},
 		{
-			{'o','o','o'},
-			{'o','o','o'},
-			{'o','o','o'}
+			{'O','O','O'},
+			{'O','O','O'},
+			{'O','O','O'}
 		},
 		{
-			{'y','y','y'},
-			{'y','y','y'},
-			{'y','y','y'}
+			{'Y','Y','Y'},
+			{'Y','Y','Y'},
+			{'Y','Y','Y'}
 		},
 	};
 
 
 	Cube c(cubeMat);
 
-	c.U();
-	c.F2();
-	c.D_P();
-
-	c.Print();
+	c.R();
 
 	cout << endl << endl << "Solving..." << endl << endl;
 

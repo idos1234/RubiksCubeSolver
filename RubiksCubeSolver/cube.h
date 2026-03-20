@@ -10,9 +10,7 @@
 #define CORNERS_PDB_SIZE 88179840
 #define EDGES_PDB_SIZE 42577920
 
-
 using namespace std;
-
 
 struct PairFirstComparator {
 	bool operator()(const pair<int, char*>& a, const pair<int, char*>& b) const {
@@ -22,7 +20,20 @@ struct PairFirstComparator {
 
 class Cube {
 private:
-	char cubeMat[6][CUBESIZE][CUBESIZE];
+	// Corners
+	signed char cp[8]; // Corner Permutation
+	signed char co[8]; // Corner Orientation
+
+	//Edges
+	signed char ep[12]; // Edge Permutation
+	signed char eo[12]; // Edge Orientation
+
+	// Move tables for corners and edges
+	static signed char CP_PERM[18][8];
+	static signed char CO_ORI[18][8];
+	static signed char EP_PERM[18][12];
+	static signed char EO_ORI[18][12];
+
 	int numOfTurns;
 
 	vector<const char*> steps;
@@ -37,29 +48,39 @@ public:
 private:
 	static void InitPdb();
 
-
-private:
-	void TurnClockWise(char side[CUBESIZE][CUBESIZE]);
-	void TurnCounterClockWise(char side[CUBESIZE][CUBESIZE]);
-	void Turn180(char side[CUBESIZE][CUBESIZE]);
-
-
-	//dfs for building the PDB for corners
-	void PDB_DFS_CORNERS(int turn = 0);
-	bool CornerComp(char a1, char b1, char c1, char a2, char b2, char c2);
-	int FindCornerNum(char a, char b, char c);
-	int CalcCornerPermutationIndex();
-
-
-	bool EdgeComp(char a1, char b1, char a2, char b2);
-	int FindEdgeIndex(char a, char b);
-	int CalcEdgesIndex_1();
-	int CalcEdgesIndex_2();
-	void PDB_DFS_EDGES_1(int turn = 0);
-	void PDB_DFS_EDGES_2(int turn = 0);
+public:
+	void ManualApplyMove(int face);
+	static void InitMoveTables();
 
 
 public:
+	void ApplyMove(int face, int times);
+
+
+	//dfs for building the PDB for corners
+	void PDB_BFS_CORNERS();
+	void UpdateTurnForChildren_Corners(int turn, int index);
+	int CalcCornerPermutationIndex();
+	int FindCornerNum(char c1, char c2, char c3);
+	bool CornerComp(char a1, char b1, char c1, char a2, char b2, char c2);
+	pair<int, int> IdentifyCorner(const char cubeMat[6][CUBESIZE][CUBESIZE], int position);
+
+
+	pair<int, int> IdentifyEdge(const char cubeMat[6][CUBESIZE][CUBESIZE], int position);
+	bool EdgeComp(char a1, char b1, char a2, char b2);
+	int FindEdgeNum(char a, char b);
+	int CalcEdgesIndex_1();
+	int CalcEdgesIndex_2();
+	void UpdateTurnForChildren_Edges1(int turn, int index);
+	void UpdateTurnForChildren_Edges2(int turn, int index);
+	void PDB_BFS_EDGES_1();
+	void PDB_BFS_EDGES_2();
+
+
+public:
+
+
+
 	void R();
 	void R_P();
 	void R2();
@@ -81,11 +102,10 @@ public:
 
 	void Scramble(int movesCount);
 
-	void Print();
-
 	static void FreePdb();
 
 private:
+	int GetHeuristic();
 	bool IsSolved() const;
 	bool SolveHelper(int turn = 0);
 

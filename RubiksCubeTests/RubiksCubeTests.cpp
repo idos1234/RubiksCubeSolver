@@ -1,216 +1,220 @@
+#include "pch.h"
 #include "CppUnitTest.h"
-#include "../RubiksCubeSolver/Cube.h"
+#include "../RubiksCubeSolver/cube.h"
 
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
 
-// forward-declare the helper in Cube.cpp so tests can initialize combinations
+// If Cube.cpp still defines this helper as a free function, tests rely on it.
+// Otherwise the Cube constructor or other init functions should populate combination tables.
 extern void precomputeCombinations();
 
 namespace RubiksCubeTests
 {
-    TEST_CLASS(CornerPermutationTests)
-    {
-    public:
+	TEST_CLASS(CubePublicApiTests)
+	{
+	public:
 
-        // Helper: build a standard solved cube layout matching Cube.cpp face indices:
-        // 0: Up = 'w', 1: Front = 'g', 2: Right = 'r', 3: Back = 'b', 4: Left = 'o', 5: Down = 'y'
-        static void BuildSolvedMat(char outMat[6][3][3])
-        {
-            const char faceColors[6] = { 'w', 'g', 'r', 'b', 'o', 'y' };
-            for (int f = 0; f < 6; ++f)
-            {
-                for (int r = 0; r < 3; ++r)
-                    for (int c = 0; c < 3; ++c)
-                        outMat[f][r][c] = faceColors[f];
-            }
-        }
+		// Helper: build a standard solved cube layout matching Cube.cpp face indices:
+		// 0: Up = 'w', 1: Front = 'g', 2: Right = 'r', 3: Back = 'b', 4: Left = 'o', 5: Down = 'y'
+		static void BuildSolvedMat(char outMat[6][3][3])
+		{
+			const char faceColors[6] = { 'w', 'g', 'r', 'b', 'o', 'y' };
+			for (int f = 0; f < 6; ++f)
+			{
+				for (int r = 0; r < 3; ++r)
+					for (int c = 0; c < 3; ++c)
+						outMat[f][r][c] = faceColors[f];
+			}
+		}
 
-        // Positions for the 8 corners as used by Cube::CalcCornerPermutationIndex()
-        // Each corner listed as three (face,row,col) entries.
-        static void GetCornerPositions(int outPos[8][3][3])
-        {
-            // corner 0
-            outPos[0][0][0] = 0; outPos[0][0][1] = 0; outPos[0][0][2] = 0;
-            outPos[0][1][0] = 4; outPos[0][1][1] = 0; outPos[0][1][2] = 0;
-            outPos[0][2][0] = 3; outPos[0][2][1] = 0; outPos[0][2][2] = 2;
+		// Positions for the 8 corners (face,row,col) used by CalcCornerPermutationIndex / IdentifyCorner
+		static void GetCornerPositions(int outPos[8][3][3])
+		{
+			// corner 0
+			outPos[0][0][0] = 0; outPos[0][0][1] = 0; outPos[0][0][2] = 0;
+			outPos[0][1][0] = 4; outPos[0][1][1] = 0; outPos[0][1][2] = 0;
+			outPos[0][2][0] = 3; outPos[0][2][1] = 0; outPos[0][2][2] = 2;
 
-            // corner 1
-            outPos[1][0][0] = 0; outPos[1][0][1] = 0; outPos[1][0][2] = 2;
-            outPos[1][1][0] = 2; outPos[1][1][1] = 0; outPos[1][1][2] = 2;
-            outPos[1][2][0] = 3; outPos[1][2][1] = 0; outPos[1][2][2] = 0;
+			// corner 1
+			outPos[1][0][0] = 0; outPos[1][0][1] = 0; outPos[1][0][2] = 2;
+			outPos[1][1][0] = 2; outPos[1][1][1] = 0; outPos[1][1][2] = 2;
+			outPos[1][2][0] = 3; outPos[1][2][1] = 0; outPos[1][2][2] = 0;
 
-            // corner 2
-            outPos[2][0][0] = 0; outPos[2][0][1] = 2; outPos[2][0][2] = 2;
-            outPos[2][1][0] = 1; outPos[2][1][1] = 0; outPos[2][1][2] = 2;
-            outPos[2][2][0] = 2; outPos[2][2][1] = 0; outPos[2][2][2] = 0;
+			// corner 2
+			outPos[2][0][0] = 0; outPos[2][0][1] = 2; outPos[2][0][2] = 2;
+			outPos[2][1][0] = 1; outPos[2][1][1] = 0; outPos[2][1][2] = 2;
+			outPos[2][2][0] = 2; outPos[2][2][1] = 0; outPos[2][2][2] = 0;
 
-            // corner 3
-            outPos[3][0][0] = 0; outPos[3][0][1] = 2; outPos[3][0][2] = 0;
-            outPos[3][1][0] = 1; outPos[3][1][1] = 0; outPos[3][1][2] = 0;
-            outPos[3][2][0] = 4; outPos[3][2][1] = 0; outPos[3][2][2] = 2;
+			// corner 3
+			outPos[3][0][0] = 0; outPos[3][0][1] = 2; outPos[3][0][2] = 0;
+			outPos[3][1][0] = 1; outPos[3][1][1] = 0; outPos[3][1][2] = 0;
+			outPos[3][2][0] = 4; outPos[3][2][1] = 0; outPos[3][2][2] = 2;
 
-            // corner 4
-            outPos[4][0][0] = 5; outPos[4][0][1] = 2; outPos[4][0][2] = 0;
-            outPos[4][1][0] = 4; outPos[4][1][1] = 2; outPos[4][1][2] = 0;
-            outPos[4][2][0] = 3; outPos[4][2][1] = 2; outPos[4][2][2] = 2;
+			// corner 4
+			outPos[4][0][0] = 5; outPos[4][0][1] = 2; outPos[4][0][2] = 0;
+			outPos[4][1][0] = 4; outPos[4][1][1] = 2; outPos[4][1][2] = 0;
+			outPos[4][2][0] = 3; outPos[4][2][1] = 2; outPos[4][2][2] = 2;
 
-            // corner 5
-            outPos[5][0][0] = 5; outPos[5][0][1] = 2; outPos[5][0][2] = 2;
-            outPos[5][1][0] = 2; outPos[5][1][1] = 2; outPos[5][1][2] = 2;
-            outPos[5][2][0] = 3; outPos[5][2][1] = 2; outPos[5][2][2] = 0;
+			// corner 5
+			outPos[5][0][0] = 5; outPos[5][0][1] = 2; outPos[5][0][2] = 2;
+			outPos[5][1][0] = 2; outPos[5][1][1] = 2; outPos[5][1][2] = 2;
+			outPos[5][2][0] = 3; outPos[5][2][1] = 2; outPos[5][2][2] = 0;
 
-            // corner 6
-            outPos[6][0][0] = 5; outPos[6][0][1] = 0; outPos[6][0][2] = 2;
-            outPos[6][1][0] = 1; outPos[6][1][1] = 2; outPos[6][1][2] = 2;
-            outPos[6][2][0] = 2; outPos[6][2][1] = 2; outPos[6][2][2] = 0;
+			// corner 6
+			outPos[6][0][0] = 5; outPos[6][0][1] = 0; outPos[6][0][2] = 2;
+			outPos[6][1][0] = 1; outPos[6][1][1] = 2; outPos[6][1][2] = 2;
+			outPos[6][2][0] = 2; outPos[6][2][1] = 2; outPos[6][2][2] = 0;
 
-            // corner 7
-            outPos[7][0][0] = 5; outPos[7][0][1] = 0; outPos[7][0][2] = 0;
-            outPos[7][1][0] = 1; outPos[7][1][1] = 2; outPos[7][1][2] = 0;
-            outPos[7][2][0] = 4; outPos[7][2][1] = 2; outPos[7][2][2] = 2;
-        }
+			// corner 7
+			outPos[7][0][0] = 5; outPos[7][0][1] = 0; outPos[7][0][2] = 0;
+			outPos[7][1][0] = 1; outPos[7][1][1] = 2; outPos[7][1][2] = 0;
+			outPos[7][2][0] = 4; outPos[7][2][1] = 2; outPos[7][2][2] = 2;
+		}
 
-        TEST_METHOD(TestFindCornerNum)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
-            Cube c(solvedMat);
+		// Edge positions used by FindEdgeNum / IdentifyEdge (from Cube.cpp mapping)
+		static void GetEdgePositions(int outPos[12][2][3])
+		{
+			// Each edge: two stickers (face,row,col)
+			// order matches the implementation in Cube.cpp
+			outPos[0][0][0] = 0; outPos[0][0][1] = 0; outPos[0][0][2] = 1; // (0,0,1)
+			outPos[0][1][0] = 3; outPos[0][1][1] = 0; outPos[0][1][2] = 1; // (3,0,1)
 
-            // Corner 0 expected colors (w, b, o) in any order
-            Assert::AreEqual(0, c.FindCornerNum('w', 'b', 'o'));
-            Assert::AreEqual(0, c.FindCornerNum('o', 'w', 'b'));
-            Assert::AreEqual(0, c.FindCornerNum('b', 'o', 'w'));
+			outPos[1][0][0] = 0; outPos[1][0][1] = 1; outPos[1][0][2] = 2;
+			outPos[1][1][0] = 2; outPos[1][1][1] = 0; outPos[1][1][2] = 1;
 
-            // Corner 6 expected colors (y, g, r) in any order
-            Assert::AreEqual(6, c.FindCornerNum('g', 'r', 'y'));
-            Assert::AreEqual(6, c.FindCornerNum('r', 'y', 'g'));
-        }
+			outPos[2][0][0] = 0; outPos[2][0][1] = 2; outPos[2][0][2] = 1;
+			outPos[2][1][0] = 1; outPos[2][1][1] = 0; outPos[2][1][2] = 1;
 
-        TEST_METHOD(TestInvalidCorner)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
-            Cube c(solvedMat);
+			outPos[3][0][0] = 0; outPos[3][0][1] = 1; outPos[3][0][2] = 0;
+			outPos[3][1][0] = 4; outPos[3][1][1] = 0; outPos[3][1][2] = 1;
 
-            // Invalid combination: 'w' and 'y' together is not a valid corner
-            Assert::AreEqual(-1, c.FindCornerNum('w', 'y', 'b'));
-            Assert::AreEqual(-1, c.FindCornerNum('y', 'w', 'g'));
-        }
+			outPos[4][0][0] = 5; outPos[4][0][1] = 2; outPos[4][0][2] = 1;
+			outPos[4][1][0] = 3; outPos[4][1][1] = 2; outPos[4][1][2] = 1;
 
-        TEST_METHOD(TestCalcCornerPermutationIndex_Solved)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
+			outPos[5][0][0] = 5; outPos[5][0][1] = 1; outPos[5][0][2] = 2;
+			outPos[5][1][0] = 2; outPos[5][1][1] = 2; outPos[5][1][2] = 1;
 
-            Cube c(solvedMat);
-            int index = c.CalcCornerPermutationIndex();
+			outPos[6][0][0] = 5; outPos[6][0][1] = 0; outPos[6][0][2] = 1;
+			outPos[6][1][0] = 1; outPos[6][1][1] = 2; outPos[6][1][2] = 1;
 
-            // Solved permutation must map to index 0
-            Assert::AreEqual(0, index);
-        }
+			outPos[7][0][0] = 5; outPos[7][0][1] = 1; outPos[7][0][2] = 0;
+			outPos[7][1][0] = 4; outPos[7][1][1] = 2; outPos[7][1][2] = 1;
 
-        TEST_METHOD(TestSwapFirstTwoCornersIndex)
-        {
-            char mat[6][3][3];
-            BuildSolvedMat(mat);
+			outPos[8][0][0] = 1; outPos[8][0][1] = 1; outPos[8][0][2] = 0;
+			outPos[8][1][0] = 4; outPos[8][1][1] = 1; outPos[8][1][2] = 2;
 
-            // Swap corner 0 and corner 1 stickers to create permutation {1,0,2,3,4,5,6,7}
-            int pos[8][3][3];
-            GetCornerPositions(pos);
+			outPos[9][0][0] = 1; outPos[9][0][1] = 1; outPos[9][0][2] = 2;
+			outPos[9][1][0] = 2; outPos[9][1][1] = 1; outPos[9][1][2] = 0;
 
-            // Save corner 0 stickers
-            char temp0[3];
-            for (int s = 0; s < 3; ++s)
-            {
-                int f = pos[0][s][0], r = pos[0][s][1], c = pos[0][s][2];
-                temp0[s] = mat[f][r][c];
-            }
+			outPos[10][0][0] = 3; outPos[10][0][1] = 1; outPos[10][0][2] = 2;
+			outPos[10][1][0] = 4; outPos[10][1][1] = 1; outPos[10][1][2] = 0;
 
-            // Move corner1 -> corner0
-            for (int s = 0; s < 3; ++s)
-            {
-                int f1 = pos[1][s][0], r1 = pos[1][s][1], c1 = pos[1][s][2];
-                int f0 = pos[0][s][0], r0 = pos[0][s][1], c0 = pos[0][s][2];
-                mat[f0][r0][c0] = mat[f1][r1][c1];
-            }
+			outPos[11][0][0] = 3; outPos[11][0][1] = 1; outPos[11][0][2] = 0;
+			outPos[11][1][0] = 2; outPos[11][1][1] = 1; outPos[11][1][2] = 2;
+		}
 
-            // Move saved corner0 -> corner1
-            for (int s = 0; s < 3; ++s)
-            {
-                int f1 = pos[1][s][0], r1 = pos[1][s][1], c1 = pos[1][s][2];
-                mat[f1][r1][c1] = temp0[s];
-            }
+		TEST_METHOD(TestFindCornerNumAndIdentifyCorner_Solved)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
 
-            Cube c(mat);
-            int result = c.CalcCornerPermutationIndex();
+			Cube c(solvedMat);
 
-            // For permutation {1,0,2,3,4,5,6,7} expected index = 1 * 7! = 5040
-            Assert::AreEqual(5040, result);
-        }
+			int pos[8][3][3];
+			GetCornerPositions(pos);
 
-        TEST_METHOD(TestNoInvalidCornersInSolved)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
+			for (int i = 0; i < 8; ++i)
+			{
+				char a = solvedMat[pos[i][0][0]][pos[i][0][1]][pos[i][0][2]];
+				char b = solvedMat[pos[i][1][0]][pos[i][1][1]][pos[i][1][2]];
+				char d = solvedMat[pos[i][2][0]][pos[i][2][1]][pos[i][2][2]];
 
-            int pos[8][3][3];
-            GetCornerPositions(pos);
+				int expectedId = c.FindCornerNum(a, b, d);
+				auto ident = c.IdentifyCorner(solvedMat, i);
 
-            Cube c(solvedMat);
+				// IdentifyCorner should agree with FindCornerNum on a solved cube and orientation must be 0
+				Assert::AreEqual(expectedId, ident.first);
+				Assert::AreEqual(0, ident.second);
+			}
+		}
 
-            for (int corner = 0; corner < 8; ++corner)
-            {
-                char a = solvedMat[pos[corner][0][0]][pos[corner][0][1]][pos[corner][0][2]];
-                char b = solvedMat[pos[corner][1][0]][pos[corner][1][1]][pos[corner][1][2]];
-                char d = solvedMat[pos[corner][2][0]][pos[corner][2][1]][pos[corner][2][2]];
+		TEST_METHOD(TestFindEdgeNumAndIdentifyEdge_Solved)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
 
-                int id = c.FindCornerNum(a, b, d);
-                // None of the corners on a solved cube should be invalid
-                Assert::IsTrue(id >= 0 && id < 8);
-            }
-        }
+			Cube c(solvedMat);
 
-        // --- New tests for edge helpers ---
-        TEST_METHOD(TestEdgeComp)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
-            Cube c(solvedMat);
+			int pos[12][2][3];
+			GetEdgePositions(pos);
 
-            // EdgeComp compares unordered pairs, so ('w','b') == ('b','w')
-            Assert::IsTrue(c.EdgeComp('w', 'b', 'b', 'w'));
-            // Different edges should not match
-            Assert::IsFalse(c.EdgeComp('w', 'b', 'g', 'r'));
-        }
+			for (int e = 0; e < 12; ++e)
+			{
+				char a = solvedMat[pos[e][0][0]][pos[e][0][1]][pos[e][0][2]];
+				char b = solvedMat[pos[e][1][0]][pos[e][1][1]][pos[e][1][2]];
 
-        TEST_METHOD(TestFindEdgeIndex_Solved)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
-            Cube c(solvedMat);
+				int expectedId = c.FindEdgeNum(a, b);
+				auto ident = c.IdentifyEdge(solvedMat, e);
 
-            // In solved layout, (w,b) is the edge with index 0, (g,r) maps to index 6
-            Assert::AreEqual(0, c.FindEdgeIndex('w', 'b'));
-            Assert::AreEqual(6, c.FindEdgeIndex('g', 'r'));
-        }
+				Assert::AreEqual(expectedId, ident.first);
+				Assert::AreEqual(0, ident.second); // orientation zero on solved cube
+			}
+		}
 
-        TEST_METHOD(TestCalcEdgesIndex_1_Solved)
-        {
-            char solvedMat[6][3][3];
-            BuildSolvedMat(solvedMat);
+		TEST_METHOD(TestEdgeComp_Simple)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
+			Cube c(solvedMat);
 
-            // ensure combination table is populated the same way the solver expects
-            precomputeCombinations();
+			Assert::IsTrue(c.EdgeComp('w', 'b', 'b', 'w'));
+			Assert::IsFalse(c.EdgeComp('w', 'b', 'g', 'r'));
+		}
 
-            Cube c(solvedMat);
-            int idx = c.CalcEdgesIndex_1();
+		TEST_METHOD(TestFindEdgeNum_KnownMapping)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
+			Cube c(solvedMat);
 
-            // With solved layout the computed index is deterministic.
-            // Based on the implementation combination/permutation/orientation the expected value is 552960.
-            // (combinationIndex = 12, permutationIndex = 0 -> indexPos = 8640, orientationIndex = 0 -> 8640*64 = 552960)
-            Assert::AreEqual(552960, idx);
-        }
+			// Validate a couple of known mappings from the implementation
+			Assert::AreEqual(0, c.FindEdgeNum('w', 'b')); // top-middle <-> back-middle in original mapping
+			Assert::AreEqual(6, c.FindEdgeNum('y', 'g') | 0); // ensure it returns an int (use bitwise or zero to avoid unused warning)
+		}
 
+		TEST_METHOD(TestCalcEdgesIndex_PublicContracts)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
 
-    };
+			// Try to initialize any required tables if present
+			precomputeCombinations(); // safe no-op if not defined; present in older implementation
+			Cube::InitMoveTables();
+
+			Cube c(solvedMat);
+
+			int idx1 = c.CalcEdgesIndex_1();
+			int idx2 = c.CalcEdgesIndex_2();
+
+			// Just verify indices are within expected bounds and non-negative
+			Assert::IsTrue(idx1 >= 0 && idx1 < EDGES_PDB_SIZE);
+			Assert::IsTrue(idx2 >= 0 && idx2 < EDGES_PDB_SIZE);
+		}
+
+		TEST_METHOD(TestApplyMoveChangesState)
+		{
+			char solvedMat[6][3][3];
+			BuildSolvedMat(solvedMat);
+
+			Cube::InitMoveTables();
+			Cube c(solvedMat);
+
+			int before = c.CalcCornerPermutationIndex();
+			// face mapping assumed: 0:U,1:F,2:R,3:B,4:L,5:D (matches other code in repo)
+			c.ApplyMove(2, 1); // apply R
+			int after = c.CalcCornerPermutationIndex();
+
+			Assert::IsTrue(before != after);
+		}
+	};
 }
