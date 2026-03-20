@@ -9,6 +9,9 @@ signed char Cube::EO_ORI[18][12];
 signed char Cube::CP_PERM[18][8];
 signed char Cube::CO_ORI[18][8];
 
+const int Cube::facts_8[8] = { 5040, 720, 120, 24, 6, 2, 1, 1 };
+const int Cube::facts_6[6] = { 120, 24, 6, 2, 1, 1 };
+
 int C[13][7];
 
 void precomputeCombinations() {
@@ -82,37 +85,37 @@ void Cube::ManualApplyMove(int face) {
         };
 
     switch (face) {
-    case 0: // U (Up) - פאה עליונה (לבן)
+    case 0: // U
         rotateCorners(0, 1, 2, 3);
         rotateEdges(0, 1, 2, 3);
         break;
-    case 1: // D (Down) - פאה תחתונה (צהוב)
+    case 1: // D
         rotateCorners(4, 7, 6, 5);
         rotateEdges(4, 7, 6, 5);
         break;
-    case 2: // L (Left) - פאה שמאלית (כתום)
+    case 2: // L
         rotateCorners(0, 3, 4, 5);
         rotateEdges(8, 11, 4, 9);
-        // שינוי אוריינטציה בפינות (בציר L/R האוריינטציה משתנה 1-2-1-2)
+		// change corner orientations for L moves (clockwise rotation adds 1 to the orientation of the affected corners, counter-clockwise adds 2)
         co[0] = (co[0] + 1) % 3; co[3] = (co[3] + 2) % 3;
         co[4] = (co[4] + 1) % 3; co[5] = (co[5] + 2) % 3;
-        // בשיטת הקידוד הסטנדרטית, ב-L/R אין שינוי EO
+		// change edge orientations for L moves (edges in the L face change orientation)
         break;
-    case 3: // R (Right) - פאה ימנית (אדום)
+    case 3: // R
         rotateCorners(1, 6, 7, 2);
         rotateEdges(2, 6, 10, 1);
         co[1] = (co[1] + 1) % 3; co[6] = (co[6] + 2) % 3;
         co[7] = (co[7] + 1) % 3; co[2] = (co[2] + 2) % 3;
         break;
-    case 4: // F (Front) - פאה קדמית (ירוק)
+    case 4: // F
         rotateCorners(2, 7, 4, 3);
         rotateEdges(3, 7, 11, 8);
         co[2] = (co[2] + 1) % 3; co[7] = (co[7] + 2) % 3;
         co[4] = (co[4] + 1) % 3; co[3] = (co[3] + 2) % 3;
-        // שינוי EO במהלכי F/B
+		// change edge orientations for F moves (edges in the F face change orientation)
         for (int e : {3, 7, 11, 8}) eo[e] = 1 - eo[e];
         break;
-    case 5: // B (Back) - פאה אחורית (כחול)
+    case 5: // B
         rotateCorners(0, 5, 6, 1);
         rotateEdges(1, 5, 9, 6);
         co[0] = (co[0] + 1) % 3; co[5] = (co[5] + 2) % 3;
@@ -387,22 +390,23 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
     int indexes[8] = {};
 	int biggerCount[8] = {};
 
-	vector<int> numbers = { 0, 1, 2, 3, 4, 5, 6, 7 };
+    int numbers[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 	//calculate the count of bigger numbers for each position in the permutation from the index
-    static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 1 };
     for (int i = 0; i < 8; ++i)
     {
-        biggerCount[i] = index / facts[i];
-        index = index % facts[i];
-    }
+		// calculate the count of bigger numbers for position i
+        int count = index / facts_8[i];
+        index %= facts_8[i];
 
-	// reconstruct the corner permutation from the index
-    for (int i = 0; i < 8; ++i)
-    {
-		int count = biggerCount[i];
+        // השמה של הפינה הנכונה במיקום i
         indexes[i] = numbers[count];
-		numbers.erase(numbers.begin() + count);
+
+		// manually remove the used number from the list of available numbers
+        for (int j = count; j < 7 - i; ++j)
+        {
+            numbers[j] = numbers[j + 1];
+        }
     }
 
 	//generate child states for each possible move
@@ -422,7 +426,6 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
         for (int i = 0; i < 8; ++i)
         {
             int count = 0;
-            static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
 
             for (int j = i + 1; j < 8; ++j)
             {
@@ -431,7 +434,7 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
                 }
             }
 
-            childIndex += (count * facts[i]);
+            childIndex += (count * facts_8[i]);
         }
 
 		//update index in PDB if not visited before
@@ -442,8 +445,6 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
 }
 int Cube::CalcCornerPermutationIndex() {
     int index = 0;
-    // מערך עצרות מוכן מראש: 7!, 6!, 5!, 4!, 3!, 2!, 1!, 0!
-    static const int facts[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
 
     for (int i = 0; i < 8; ++i) {
         int count = 0;
@@ -452,7 +453,7 @@ int Cube::CalcCornerPermutationIndex() {
                 ++count;
             }
         }
-        index += (count * facts[i]);
+        index += (count * facts_8[i]);
     }
 
     return index;
@@ -532,7 +533,6 @@ int Cube::CalcEdgesIndex_1() {
 	    // calculate permutation index of the 6 edges in the first group
 	    int permutationIndex = 0;
 
-        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
         for (int i = 0; i < 6; ++i)
         {
             int count = 0;
@@ -542,7 +542,7 @@ int Cube::CalcEdgesIndex_1() {
                     ++count;
                 }
             }
-            permutationIndex += (count * facts[i]);
+            permutationIndex += (count * facts_6[i]);
         }
 
         // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
@@ -586,7 +586,6 @@ int Cube::CalcEdgesIndex_2() {
 	    // calculate permutation index of the 6 edges in the first group
 	    int permutationIndex = 0;
 
-        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
         for (int i = 0; i < 6; ++i)
         {
             int count = 0;
@@ -596,7 +595,7 @@ int Cube::CalcEdgesIndex_2() {
                     ++count;
                 }
             }
-            permutationIndex += (count * facts[i]);
+            permutationIndex += (count * facts_6[i]);
         }
 
         // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
@@ -646,22 +645,23 @@ void Cube::UpdateTurnForChildren_Edges1(int turn, int index) {
     //recreate the edges premutation
     int permutations[6] = {};
 
-    vector<int> numbers = { 0, 1, 2, 3, 4, 5};
+    int numbers[6] = {0, 1, 2, 3, 4, 5};
 
     int tempPerm = currentPermIdx;
-	int factorial = 120; // 5!
 
     //calculate the count of bigger numbers for each position in the permutation
     for (int i = 0; i < 6; ++i)
     {
-        int count = tempPerm / factorial;
-        tempPerm %= factorial;
+        int count = tempPerm / facts_6[i];
+        tempPerm %= facts_6[i];
 
 
 		permutations[i] = numbers[count];
-		numbers.erase(numbers.begin() + count);
-
-        if (i < 5) factorial /= (5 - i);
+		//manually remove the used number from the list of available numbers
+        for (int j = count; j < 5 - i; ++j)
+        {
+            numbers[j] = numbers[j + 1];
+        }
     }
 
 
@@ -722,14 +722,13 @@ void Cube::UpdateTurnForChildren_Edges1(int turn, int index) {
 
 		// permutation
         int childPerm = 0;
-        static const int facts[6] = { 120, 24, 6, 2, 1, 0 };
 
         for (int i = 0; i < 6; ++i) {
             int count = 0;
             for (int j = i + 1; j < 6; ++j) {
                 if (next_permutations[j] < next_permutations[i]) count++;
             }
-            childPerm += count * facts[i];
+            childPerm += count * facts_6[i];
         }
 
 		// orientation
@@ -782,22 +781,23 @@ void Cube::UpdateTurnForChildren_Edges2(int turn, int index) {
     //recreate the edges premutation
     int permutations[6] = {};
 
-    vector<int> numbers = { 6, 7, 8, 9, 10, 11 };
+    int numbers[6] = { 6, 7, 8, 9, 10, 11 };
 
     int tempPerm = currentPermIdx;
-    int factorial = 120; // 5!
 
     //calculate the count of bigger numbers for each position in the permutation
     for (int i = 0; i < 6; ++i)
     {
-        int count = tempPerm / factorial;
-        tempPerm %= factorial;
-
+        int count = tempPerm / facts_6[i];
+        tempPerm %= facts_6[i];
 
         permutations[i] = numbers[count];
-        numbers.erase(numbers.begin() + count);
 
-        if (i < 5) factorial /= (5 - i);
+		//manually remove the used number from the list of available numbers
+        for (int j = count; j < 5 - i; ++j)
+        {
+            numbers[j] = numbers[j + 1];
+        }
     }
 
 
@@ -834,9 +834,9 @@ void Cube::UpdateTurnForChildren_Edges2(int turn, int index) {
         }
 
         // identify the occupied edges, their permutations and orientations for the child state
-        int next_occupied[6];
-        int next_permutations[6];
-        int next_orientations[6];
+        int next_occupied[6] = {};
+        int next_permutations[6] = {};
+        int next_orientations[6] = {};
         int found = 0;
 
         for (int i = 0; i < 12; ++i) {
@@ -858,14 +858,13 @@ void Cube::UpdateTurnForChildren_Edges2(int turn, int index) {
 
         // permutation
         int childPerm = 0;
-        static const int facts[6] = { 120, 24, 6, 2, 1, 0 }; // מערך קבוע ומהיר
 
         for (int i = 0; i < 6; ++i) {
             int count = 0;
             for (int j = i + 1; j < 6; ++j) {
                 if (next_permutations[j] < next_permutations[i]) count++;
             }
-            childPerm += count * facts[i]; // הכפלה פשוטה במקום הנכון במערך
+            childPerm += count * facts_6[i];
         }
 
         // orientation
@@ -913,7 +912,7 @@ void Cube::PDB_BFS_EDGES_2() {
     {
         foundNew = false;
         for (int i = 0; i < EDGES_PDB_SIZE; ++i)
-        {
+    {
             if (Cube::edges_pdb_2[i] == turn) {
                 Cube::UpdateTurnForChildren_Edges2(turn, i);
                 foundNew = true;
@@ -953,7 +952,6 @@ pair<int, int> Cube::IdentifyEdge(const char mat[6][CUBESIZE][CUBESIZE], int pos
         eo = 1;
     }
     else if (c1 != 'W' && c1 != 'Y' && c2 != 'W' && c2 != 'Y') {
-        // קצוות שכבת האמצע (E-layer)
         if (c2 == 'G' || c2 == 'B') eo = 1;
     }
 
@@ -982,7 +980,6 @@ int Cube::GetHeuristic() {
     int h_edges1 = Cube::edges_pdb_1[CalcEdgesIndex_1()];
     int h_edges2 = Cube::edges_pdb_2[CalcEdgesIndex_2()];
 
-    // המחיר המינימלי להגעה לפתרון הוא לפחות הגדול מביניהם
     return std::max({ h_corners, h_edges1, h_edges2 });
 }
 bool Cube::SolveHelper(int turn) {

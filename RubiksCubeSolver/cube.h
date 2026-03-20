@@ -41,6 +41,11 @@ private:
 	static unsigned char* edges_pdb_1;
 	static unsigned char* edges_pdb_2;
 
+	// precomputed combinations for calculating PDB indices
+	static const int facts_8[8];
+	static const int facts_6[6];
+
+
 public:
 	Cube();
 	Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]);
