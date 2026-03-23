@@ -209,10 +209,10 @@ namespace RubiksCubeTests
 			Cube::InitMoveTables();
 			Cube c(solvedMat);
 
-			int before = c.CalcCornerPermutationIndex();
+			int before = c.CalcCornerIndex();
 			// face mapping assumed: 0:U,1:F,2:R,3:B,4:L,5:D (matches other code in repo)
 			c.ApplyMove(2, 1); // apply R
-			int after = c.CalcCornerPermutationIndex();
+			int after = c.CalcCornerIndex();
 
 			Assert::IsTrue(before != after);
 		}

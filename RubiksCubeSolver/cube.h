@@ -5,6 +5,8 @@
 #include <queue>
 #include <vector>
 
+#include "PDBReader.cpp"
+
 
 #define CUBESIZE 3
 #define CORNERS_PDB_SIZE 88179840
@@ -12,8 +14,10 @@
 
 using namespace std;
 
+void precomputeCombinations();
+
 struct PairFirstComparator {
-	bool operator()(const pair<int, char*>& a, const pair<int, char*>& b) const {
+	bool operator()(const pair<int, int>& a, const pair<int, int>& b) const {
 		return a.first > b.first;
 	}
 };
@@ -36,7 +40,7 @@ private:
 
 	int numOfTurns;
 
-	vector<const char*> steps;
+	vector<int> steps;
 	static unsigned char* corners_pdb;
 	static unsigned char* edges_pdb_1;
 	static unsigned char* edges_pdb_2;
@@ -54,18 +58,18 @@ private:
 	static void InitPdb();
 
 public:
-	void ManualApplyMove(int face);
 	static void InitMoveTables();
 
 
-public:
+private:
+	void ManualApplyMove(int face);
 	void ApplyMove(int face, int times);
 
 
 	//dfs for building the PDB for corners
 	void PDB_BFS_CORNERS();
 	void UpdateTurnForChildren_Corners(int turn, int index);
-	int CalcCornerPermutationIndex();
+	int CalcCornerIndex();
 	int FindCornerNum(char c1, char c2, char c3);
 	bool CornerComp(char a1, char b1, char c1, char a2, char b2, char c2);
 	pair<int, int> IdentifyCorner(const char cubeMat[6][CUBESIZE][CUBESIZE], int position);
@@ -112,8 +116,8 @@ public:
 private:
 	int GetHeuristic();
 	bool IsSolved() const;
-	bool SolveHelper(int turn = 0);
+	bool SolveHelper(int turn = 0, int limit = 20);
 
 public:
-	vector<const char*> Solve();
+	vector<int> Solve(int limit);
 };

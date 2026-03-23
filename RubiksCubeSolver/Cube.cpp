@@ -30,6 +30,8 @@ void precomputeCombinations() {
 
 void Cube::InitPdb()
 {
+	// allocate memory for PDBs - used for bulding PDBs
+
     if (Cube::corners_pdb == nullptr)
     {
         Cube::corners_pdb = (unsigned char*)calloc(CORNERS_PDB_SIZE, sizeof(char));
@@ -66,65 +68,64 @@ void Cube::InitPdb()
         memset(edges_pdb_2, 0xFF, EDGES_PDB_SIZE);
     }
 
+	Cube solvedCube;
     Cube::corners_pdb[0] = 0;
 	Cube::edges_pdb_1[0] = 0;
-    Cube::edges_pdb_2[0] = 0;
+    Cube::edges_pdb_2[solvedCube.CalcEdgesIndex_2()] = 0;
+
 
 
 }
 
 void Cube::ManualApplyMove(int face) {
-    // עזרים לביצוע החלפות (Swaps)
-    auto rotateCorners = [&](int c1, int c2, int c3, int c4) {
-        signed char temp_cp = cp[c1]; cp[c1] = cp[c2]; cp[c2] = cp[c3]; cp[c3] = cp[c4]; cp[c4] = temp_cp;
-        signed char temp_co = co[c1]; co[c1] = co[c2]; co[c2] = co[c3]; co[c3] = co[c4]; co[c4] = temp_co;
+    signed char old_cp[8], old_co[8];
+    signed char old_ep[12], old_eo[12];
+    for (int i = 0; i < 8; i++) { old_cp[i] = cp[i]; old_co[i] = co[i]; }
+    for (int i = 0; i < 12; i++) { old_ep[i] = ep[i]; old_eo[i] = eo[i]; }
+
+	// helper lambdas to set corners and edges based on the old state and the move's effect
+    auto setC = [&](int dest, int src, int ori) {
+        cp[dest] = old_cp[src];
+        co[dest] = (old_co[src] + ori) % 3;
         };
-    auto rotateEdges = [&](int e1, int e2, int e3, int e4) {
-        signed char temp_ep = ep[e1]; ep[e1] = ep[e2]; ep[e2] = ep[e3]; ep[e3] = ep[e4]; ep[e4] = temp_ep;
-        signed char temp_eo = eo[e1]; eo[e1] = eo[e2]; eo[e2] = eo[e3]; eo[e3] = eo[e4]; eo[e4] = temp_eo;
+
+    auto setE = [&](int dest, int src, bool flip) {
+        ep[dest] = old_ep[src];
+        eo[dest] = flip ? (1 - old_eo[src]) : old_eo[src];
         };
 
     switch (face) {
-    case 0: // U
-        rotateCorners(0, 1, 2, 3);
-        rotateEdges(0, 1, 2, 3);
+    case 0: // U (Up)
+        setC(0, 1, 0); setC(1, 2, 0); setC(2, 3, 0); setC(3, 0, 0);
+        setE(0, 1, false); setE(1, 2, false); setE(2, 3, false); setE(3, 0, false);
         break;
-    case 1: // D
-        rotateCorners(4, 7, 6, 5);
-        rotateEdges(4, 7, 6, 5);
+
+    case 1: // F (Front)
+        setC(2, 1, 1); setC(1, 0, 2); setC(0, 5, 1); setC(5, 2, 2);
+        setE(3, 7, true); setE(7, 11, true); setE(11, 8, true); setE(8, 3, true);
         break;
-    case 2: // L
-        rotateCorners(0, 3, 4, 5);
-        rotateEdges(8, 11, 4, 9);
-		// change corner orientations for L moves (clockwise rotation adds 1 to the orientation of the affected corners, counter-clockwise adds 2)
-        co[0] = (co[0] + 1) % 3; co[3] = (co[3] + 2) % 3;
-        co[4] = (co[4] + 1) % 3; co[5] = (co[5] + 2) % 3;
-		// change edge orientations for L moves (edges in the L face change orientation)
+
+    case 2: // R (Right)
+        setC(1, 6, 1); setC(6, 7, 2); setC(7, 2, 1); setC(2, 1, 2);
+        setE(2, 6, false); setE(6, 10, false); setE(10, 1, false); setE(1, 2, false);
         break;
-    case 3: // R
-        rotateCorners(1, 6, 7, 2);
-        rotateEdges(2, 6, 10, 1);
-        co[1] = (co[1] + 1) % 3; co[6] = (co[6] + 2) % 3;
-        co[7] = (co[7] + 1) % 3; co[2] = (co[2] + 2) % 3;
+
+    case 3: // B (Back)
+        setC(0, 3, 1); setC(3, 2, 2); setC(2, 7, 1); setC(7, 0, 2);
+        setE(1, 5, true); setE(5, 9, true); setE(9, 6, true); setE(6, 1, true);
         break;
-    case 4: // F
-        rotateCorners(2, 7, 4, 3);
-        rotateEdges(3, 7, 11, 8);
-        co[2] = (co[2] + 1) % 3; co[7] = (co[7] + 2) % 3;
-        co[4] = (co[4] + 1) % 3; co[3] = (co[3] + 2) % 3;
-		// change edge orientations for F moves (edges in the F face change orientation)
-        for (int e : {3, 7, 11, 8}) eo[e] = 1 - eo[e];
+
+    case 4: // L (Left)
+        setC(0, 3, 1); setC(3, 4, 2); setC(4, 5, 1); setC(5, 0, 2);
+        setE(8, 11, false); setE(11, 4, false); setE(4, 9, false); setE(9, 8, false);
         break;
-    case 5: // B
-        rotateCorners(0, 5, 6, 1);
-        rotateEdges(1, 5, 9, 6);
-        co[0] = (co[0] + 1) % 3; co[5] = (co[5] + 2) % 3;
-        co[6] = (co[6] + 1) % 3; co[1] = (co[1] + 2) % 3;
-        for (int e : {1, 5, 9, 6}) eo[e] = 1 - eo[e];
+
+    case 5: // D (Down)
+        setC(4, 5, 0); setC(5, 6, 0); setC(6, 7, 0); setC(7, 4, 0);
+        setE(4, 5, false); setE(5, 6, false); setE(6, 7, false); setE(7, 4, false);
         break;
     }
 }
-
 void Cube::InitMoveTables() {
     for (int f = 0; f < 6; f++) {
         for (int t = 1; t <= 3; t++) {
@@ -156,7 +157,7 @@ void Cube::FreePdb() {
     }
 }
 
-Cube::Cube(const char cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, nullptr) {
+Cube::Cube(const char cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, 0) {
 	// Identify corners and edges from the cubeMat
     for (int i = 0; i < 8; i++) {
         auto result = IdentifyCorner(cubeMat, i);
@@ -172,7 +173,7 @@ Cube::Cube(const char cubeMat[6][CUBESIZE][CUBESIZE]) :numOfTurns(0), steps(20, 
     }
 }
 
-Cube::Cube() :numOfTurns(0), steps(20, nullptr) {
+Cube::Cube() :numOfTurns(0), steps(20, 0) {
 	// each corner in its place, orientation 0
     for (int i = 0; i < 8; i++) {
         cp[i] = i;
@@ -191,25 +192,29 @@ void Cube::ApplyMove(int face, int times) {
     signed char next_cp[8], next_co[8];
     signed char next_ep[12], next_eo[12];
 
-	//update corners in one step
+	// update corners - only position and orientation of corners!
     for (int i = 0; i < 8; i++) {
-		int src = CP_PERM[moveIdx][i]; //from the move table, get the source index for this corner
+        int src = CP_PERM[moveIdx][i];
         next_cp[i] = cp[src];
-		// update orientation (add the value from the table modulo 3)
-        next_co[i] = (co[src] + CO_ORI[moveIdx][i]) % 3;
+        next_co[i] = (co[src] + CO_ORI[moveIdx][i] + 3) % 3;
     }
 
-	// update edges in one step
+	// update edges - only position and orientation of edges!
     for (int i = 0; i < 12; i++) {
         int src = EP_PERM[moveIdx][i];
         next_ep[i] = ep[src];
-		// update orientation (add the value from the table modulo 2)
-        next_eo[i] = (eo[src] + EO_ORI[moveIdx][i]) % 2;
+        next_eo[i] = (eo[src] + EO_ORI[moveIdx][i] + 2) % 2;
     }
 
 	// copy back the results to the cube's state
-    for (int i = 0; i < 8; i++) { cp[i] = next_cp[i]; co[i] = next_co[i]; }
-    for (int i = 0; i < 12; i++) { ep[i] = next_ep[i]; eo[i] = next_eo[i]; }
+    for (int i = 0; i < 8; i++) {
+        cp[i] = next_cp[i];
+        co[i] = next_co[i];
+    }
+    for (int i = 0; i < 12; i++) {
+        ep[i] = next_ep[i];
+        eo[i] = next_eo[i];
+    }
 }
 
 // --- R Moves (Right face - Red) ---
@@ -217,10 +222,10 @@ void Cube::R() {
 	this->ApplyMove(2, 1);
 }
 void Cube::R_P() {
-    this->ApplyMove(2, 2);
+    this->ApplyMove(2, 3);
 }
 void Cube::R2() {
-    this->ApplyMove(2, 3);
+    this->ApplyMove(2, 2);
 }
 
 // --- L Moves (Left face - Orange) ---
@@ -228,10 +233,10 @@ void Cube::L() {
     this->ApplyMove(4, 1);
 }
 void Cube::L_P() {
-    this->ApplyMove(4, 2);
+    this->ApplyMove(4, 3);
 }
 void Cube::L2() {
-    this->ApplyMove(4, 3);
+    this->ApplyMove(4, 2);
 }
 
 // --- U Moves (Up face - White) ---
@@ -239,10 +244,10 @@ void Cube::U() {
     this->ApplyMove(0, 1);
 }
 void Cube::U_P() {
-    this->ApplyMove(0, 2);
+    this->ApplyMove(0, 3);
 }
 void Cube::U2() {
-    this->ApplyMove(0, 3);
+    this->ApplyMove(0, 2);
 }
 
 // --- D Moves (Down face - Yellow) ---
@@ -250,10 +255,10 @@ void Cube::D() {
     this->ApplyMove(5, 1);
 }
 void Cube::D_P() {
-    this->ApplyMove(5, 2);
+    this->ApplyMove(5, 3);
 }
 void Cube::D2() {
-    this->ApplyMove(5, 3);
+    this->ApplyMove(5, 2);
 }
 
 // --- F Moves (Front face - Green) ---
@@ -261,10 +266,10 @@ void Cube::F() {
     this->ApplyMove(1, 1);
 }
 void Cube::F_P() {
-    this->ApplyMove(1, 2);
+    this->ApplyMove(1, 3);
 }
 void Cube::F2() {
-    this->ApplyMove(1, 3);
+    this->ApplyMove(1, 2);
 }
 
 // --- B Moves (Back face - Blue) ---
@@ -272,10 +277,10 @@ void Cube::B() {
     this->ApplyMove(3, 1);
 }
 void Cube::B_P() {
-    this->ApplyMove(3, 2);
+    this->ApplyMove(3, 3);
 }
 void Cube::B2() {
-    this->ApplyMove(3, 3);
+    this->ApplyMove(3, 2);
 }
 
 void Cube::Scramble(int movesCount) {
@@ -359,36 +364,37 @@ bool Cube::CornerComp(char a1, char b1, char c1, char a2, char b2, char c2) {
     return (a1 == a2 && b1 == b2 && c1 == c2);
 }
 int Cube::FindCornerNum(char a, char b, char c) {
-    if (this->CornerComp(a, b, c, 'w', 'b', 'o')) {
+    if (this->CornerComp(a, b, c, 'W', 'B', 'O')) {
         return 0;
     }
-    else if (this->CornerComp(a, b, c, 'w', 'b', 'r')) {
+    else if (this->CornerComp(a, b, c, 'W', 'B', 'R')) {
         return 1;
     }
-    else if (this->CornerComp(a, b, c, 'w', 'g', 'r')) {
+    else if (this->CornerComp(a, b, c, 'W', 'G', 'R')) {
         return 2;
     }
-    else if (this->CornerComp(a, b, c, 'w', 'g', 'o')) {
+    else if (this->CornerComp(a, b, c, 'W', 'G', 'O')) {
         return 3;
     }
-    else if (this->CornerComp(a, b, c, 'y', 'b', 'o')) {
+    else if (this->CornerComp(a, b, c, 'Y', 'B', 'O')) {
         return 4;
     }
-    else if (this->CornerComp(a, b, c, 'y', 'b', 'r')) {
+    else if (this->CornerComp(a, b, c, 'Y', 'B', 'R')) {
         return 5;
     }
-    else if (this->CornerComp(a, b, c, 'y', 'g', 'r')) {
+    else if (this->CornerComp(a, b, c, 'Y', 'G', 'R')) {
         return 6;
     }
-    else if (this->CornerComp(a, b, c, 'y', 'g', 'o')) {
+    else if (this->CornerComp(a, b, c, 'Y', 'G', 'O')) {
         return 7;
     }
 
     return -1;
 }
 void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
-    int indexes[8] = {};
+    int current_cp[8] = {};
 	int biggerCount[8] = {};
+    int permutationIndex = index / 2187;
 
     int numbers[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
@@ -396,11 +402,11 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
     for (int i = 0; i < 8; ++i)
     {
 		// calculate the count of bigger numbers for position i
-        int count = index / facts_8[i];
-        index %= facts_8[i];
+        int count = permutationIndex / facts_8[i];
+        permutationIndex %= facts_8[i];
 
-        // השמה של הפינה הנכונה במיקום i
-        indexes[i] = numbers[count];
+		// find the actual number for position i based on the count of bigger numbers
+        current_cp[i] = numbers[count];
 
 		// manually remove the used number from the list of available numbers
         for (int j = count; j < 7 - i; ++j)
@@ -409,33 +415,59 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
         }
     }
 
+	int orientationIndex = index % 2187;
+	int current_co[8] = {};
+    int orientationSum = 0;
+    //calculate the orientation of each corner from the index
+    for (int i = 0; i < 7; ++i)
+    {
+        current_co[i] = orientationIndex % 3;
+        orientationSum += current_co[i];
+        orientationIndex /= 3;
+	}
+
+    // calculate the orientation of the last corner based on the first 7 (the sum of all orientations must be divisible by 3)
+	current_co[7] = (3 - (orientationSum % 3)) % 3;
+
 	//generate child states for each possible move
     for (int m = 0; m < 18; ++m)
     {
         int child_cp[8];
+        int child_co[8];
 
 		//apply the move to the corners
         for (int i = 0; i < 8; ++i) {
-            child_cp[i] = indexes[CP_PERM[m][i]];
+            child_cp[i] = current_cp[CP_PERM[m][i]];
+            child_co[i] = (current_co[CP_PERM[m][i]] + CO_ORI[m][i] + 3) % 3;
         }
 
 
 		//calculate the index of the child state
 		int childIndex = 0;
 
-        for (int i = 0; i < 8; ++i)
-        {
-            int count = 0;
+        int permutationIndex = 0;
 
-            for (int j = i + 1; j < 8; ++j)
-            {
+        for (int i = 0; i < 8; ++i) {
+            int count = 0;
+            for (int j = i + 1; j < 8; ++j) {
                 if (child_cp[j] < child_cp[i]) {
                     ++count;
                 }
             }
-
-            childIndex += (count * facts_8[i]);
+            permutationIndex += (count * facts_8[i]);
         }
+
+        int orientationIndex = 0;
+
+        int powOf3 = 1;
+
+        for (int i = 0; i < 7; ++i)
+        {
+            orientationIndex += child_co[i] * powOf3;
+            powOf3 *= 3;
+        }
+
+		childIndex = permutationIndex * 2187 + orientationIndex;
 
 		//update index in PDB if not visited before
         if (Cube::corners_pdb[childIndex] == 255) {
@@ -443,8 +475,8 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
         }
     }
 }
-int Cube::CalcCornerPermutationIndex() {
-    int index = 0;
+int Cube::CalcCornerIndex() {
+    int permutationIndex = 0;
 
     for (int i = 0; i < 8; ++i) {
         int count = 0;
@@ -453,10 +485,20 @@ int Cube::CalcCornerPermutationIndex() {
                 ++count;
             }
         }
-        index += (count * facts_8[i]);
+        permutationIndex += (count * facts_8[i]);
     }
 
-    return index;
+	int orientationIndex = 0;
+
+	int powOf3 = 1;
+
+    for (int i = 0; i < 7; ++i)
+    {
+        orientationIndex += co[i] * powOf3;
+		powOf3 *= 3;
+    }
+
+	return permutationIndex * 2187 + orientationIndex; // Final index combining permutation and orientation
 }
 
 void Cube::PDB_BFS_CORNERS() {
@@ -476,6 +518,18 @@ void Cube::PDB_BFS_CORNERS() {
 
 		++turn;
     }
+
+    FILE* f;
+    errno_t err = fopen_s(&f, "corners.pdb", "wb");
+
+    if (err == 0) {
+        fwrite(corners_pdb, 1, CORNERS_PDB_SIZE, f);
+        fclose(f);
+    }
+    else {
+		cerr << "Error opening file for writing: " << err << endl;
+    }
+
 }
 
 // edges
@@ -561,58 +615,58 @@ int Cube::CalcEdgesIndex_1() {
         return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
     }
 int Cube::CalcEdgesIndex_2() {
-	    int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
-	    int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
-        int orientations[6];
-        int found = 0;
+	int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
+	int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
+    int orientations[6];
+    int found = 0;
 
-        // סריקת כל 12 המקומות בקובייה
-        for (int i = 0; i < 12; i++) {
-            if (ep[i] >= 6 && ep[i] <= 11) {
-                occupiedPositions[found] = i;
-                edgeIDs[found] = ep[i] - 6;
-                orientations[found] = eo[i];
-                found++;
-            }
+    // סריקת כל 12 המקומות בקובייה
+    for (int i = 0; i < 12; i++) {
+        if (ep[i] >= 6 && ep[i] <= 11) {
+            occupiedPositions[found] = i;
+            edgeIDs[found] = ep[i] - 6;
+            orientations[found] = eo[i];
+            found++;
         }
-
-	    int combinationIndex = 0;
-
-        for (int i = 0; i < 6; ++i)
-        {
-		    combinationIndex += C[occupiedPositions[i]][i + 1];
-	    }
-
-	    // calculate permutation index of the 6 edges in the first group
-	    int permutationIndex = 0;
-
-        for (int i = 0; i < 6; ++i)
-        {
-            int count = 0;
-            for (int j = i + 1; j < 6; ++j)
-            {
-                if (edgeIDs[j] < edgeIDs[i]) {
-                    ++count;
-                }
-            }
-            permutationIndex += (count * facts_6[i]);
-        }
-
-        // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
-	    int indexPos = combinationIndex * 720 + permutationIndex;
-
-	    //calculate orientation index of the 6 edges in the first group
-	    int orientationIndex = 0;
-        int PowerOf2 = 1;
-
-        for (int i = 0; i < 6; ++i)
-        {
-            orientationIndex += orientations[i] * PowerOf2;
-            PowerOf2 *= 2;
-        }
-
-        return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
     }
+
+	int combinationIndex = 0;
+
+    for (int i = 0; i < 6; ++i)
+    {
+		combinationIndex += C[occupiedPositions[i]][i + 1];
+	}
+
+	// calculate permutation index of the 6 edges in the first group
+	int permutationIndex = 0;
+
+    for (int i = 0; i < 6; ++i)
+    {
+        int count = 0;
+        for (int j = i + 1; j < 6; ++j)
+        {
+            if (edgeIDs[j] < edgeIDs[i]) {
+                ++count;
+            }
+        }
+        permutationIndex += (count * facts_6[i]);
+    }
+
+    // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
+	int indexPos = combinationIndex * 720 + permutationIndex;
+
+	//calculate orientation index of the 6 edges in the first group
+	int orientationIndex = 0;
+    int PowerOf2 = 1;
+
+    for (int i = 0; i < 6; ++i)
+    {
+        orientationIndex += orientations[i] * PowerOf2;
+        PowerOf2 *= 2;
+    }
+
+    return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
+}
 
 void Cube::UpdateTurnForChildren_Edges1(int turn, int index) {
 	int currentOriIdx = index % 64;
@@ -903,6 +957,17 @@ void Cube::PDB_BFS_EDGES_1() {
 
         ++turn;
     }
+
+    FILE* f;
+    errno_t err = fopen_s(&f, "edges_1.pdb", "wb");
+
+    if (err == 0) {
+        fwrite(edges_pdb_1, 1, EDGES_PDB_SIZE, f);
+        fclose(f);
+    }
+    else {
+        cerr << "Error opening file for writing: " << err << endl;
+    }
 }
 void Cube::PDB_BFS_EDGES_2() {
     bool foundNew = true;
@@ -920,6 +985,17 @@ void Cube::PDB_BFS_EDGES_2() {
         }
 
         ++turn;
+    }
+
+    FILE* f;
+    errno_t err = fopen_s(&f, "edges_2.pdb", "wb");
+
+    if (err == 0) {
+        fwrite(edges_pdb_2, 1, EDGES_PDB_SIZE, f);
+        fclose(f);
+    }
+    else {
+        cerr << "Error opening file for writing: " << err << endl;
     }
 }
 
@@ -952,7 +1028,7 @@ pair<int, int> Cube::IdentifyEdge(const char mat[6][CUBESIZE][CUBESIZE], int pos
         eo = 1;
     }
     else if (c1 != 'W' && c1 != 'Y' && c2 != 'W' && c2 != 'Y') {
-        if (c2 == 'G' || c2 == 'B') eo = 1;
+        if (c1 == 'G' || c1 == 'B') eo = 1;
     }
 
     return { edgeId, eo };
@@ -976,318 +1052,321 @@ bool Cube::IsSolved() const {
 }
 
 int Cube::GetHeuristic() {
-    int h_corners = Cube::corners_pdb[CalcCornerPermutationIndex()];
-    int h_edges1 = Cube::edges_pdb_1[CalcEdgesIndex_1()];
-    int h_edges2 = Cube::edges_pdb_2[CalcEdgesIndex_2()];
+    static PDBReader readerCorners("corners.pdb");
+    static PDBReader readerEdges1("edges_1.pdb");
+    static PDBReader readerEdges2("edges_2.pdb");
 
-    return std::max({ h_corners, h_edges1, h_edges2 });
+    int h_corners = readerCorners.GetDistance(this->CalcCornerIndex());
+    int h_edges1 = readerEdges1.GetDistance(this->CalcEdgesIndex_1());
+    int h_edges2 = readerEdges2.GetDistance(this->CalcEdgesIndex_2());
+
+    int h = h_corners;
+    if (h_edges1 > h) h = h_edges1;
+    if (h_edges2 > h) h = h_edges2;
+    return h;
 }
-bool Cube::SolveHelper(int turn) {
+bool Cube::SolveHelper(int turn, int limit) {
     cout << turn << ": ";
     for (int i = 0; i < turn; ++i) {
-        if(steps[i] != nullptr) {
+        if (steps[i] != 0) {
             cout << steps[i] << " ";
-		}
-	}
-	cout << endl;
+        }
+    }
+    cout << endl;
 
-    if(this->IsSolved()) {
-        Cube::steps[turn] = nullptr;
+    if (this->IsSolved()) {
+        Cube::steps[turn] = 0;
         return true;
-	}
+    }
 
 
-    if (turn >= 20) {
-        Cube::steps[turn - 1] = nullptr;
+    if (turn >= limit) {
+        Cube::steps[turn - 1] = 0;
         return false;
-	}
+    }
 
-    priority_queue<pair<int, char*>, vector<pair<int, char*>>, PairFirstComparator> minHeap_States;
+    priority_queue<pair<int, int>, vector<pair<int, int>>, PairFirstComparator> minHeap_States;
     int h;
 
-    char move[3];
+    int move;
 
 
-    //check for R
-	this->R();
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 0)) {
+        //check for R
+        this->R();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-	move[0] = 'R';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 1;
+        minHeap_States.push(make_pair(h, move));
 
-	this->R_P();
+        this->R_P();
 
-    //check for R_P
-    this->R_P();
+        //check for R_P
+        this->R_P();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-    move[0] = 'R';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 2;
+        minHeap_States.push(make_pair(h, move));
 
-    this->R();
+        this->R();
 
-    //check for R2
-    this->R2();
+        //check for R2
+        this->R2();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-	move[0] = 'R';
-	move[1] = '2';
-	move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 3;
+        minHeap_States.push(make_pair(h, move));
 
-    this->R2();
+        this->R2();
 
-    //check for L
-    this->L();
+    }
 
-    h = GetHeuristic();
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 1)) {
+        //check for L
+        this->L();
 
-	move[0] = 'L';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        h = GetHeuristic();
 
-    this->L_P();
+        move = 4;
+        minHeap_States.push(make_pair(h, move));
 
-    //check for L_P
-    this->L_P();
+        this->L_P();
 
-    h = GetHeuristic();
+        //check for L_P
+        this->L_P();
 
-    move[0] = 'L';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        h = GetHeuristic();
 
-    this->L();
+        move = 5;
+        minHeap_States.push(make_pair(h, move));
 
-    //check for L2
-    this->L2();
+        this->L();
 
-    h = GetHeuristic();
+        //check for L2
+        this->L2();
 
-	move[0] = 'L';
-	move[1] = '2';
-	move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        h = GetHeuristic();
 
-    this->L2();
+        move = 6;
+        minHeap_States.push(make_pair(h, move));
 
-    //check for U
-    this->U();
+        this->L2();
 
-    h = GetHeuristic();
+    }
 
-	move[0] = 'U';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 2)) {
+        //check for U
+        this->U();
 
-    this->U_P();
+        h = GetHeuristic();
 
-    //check for U_P
-    this->U_P();
+        move = 7;
+        minHeap_States.push(make_pair(h, move));
 
-    h = GetHeuristic();
+        this->U_P();
 
-    move[0] = 'U';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        //check for U_P
+        this->U_P();
 
-    this->U();
+        h = GetHeuristic();
 
-    //check for U2
-    this->U2();
+        move = 8;
+        minHeap_States.push(make_pair(h, move));
 
-    h = GetHeuristic();
+        this->U();
 
-	move[0] = 'U';
-	move[1] = '2';
-	move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        //check for U2
+        this->U2();
 
-    this->U2();
+        h = GetHeuristic();
 
-    //check for D
-    this->D();
+        move = 9;
+        minHeap_States.push(make_pair(h, move));
 
-    h = GetHeuristic();
+        this->U2();
 
-	move[0] = 'D';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+    }
 
-    this->D_P();
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 3)) {
+        //check for D
+        this->D();
 
-    //check for D_P
-    this->D_P();
+        h = GetHeuristic();
 
-    h = GetHeuristic();
+        move = 10;
+        minHeap_States.push(make_pair(h, move));
 
-    move[0] = 'D';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        this->D_P();
 
-    this->D();
+        //check for D_P
+        this->D_P();
 
-    //check for D2
-    this->D2();
+        h = GetHeuristic();
 
-    h = GetHeuristic();
+        move = 11;
+        minHeap_States.push(make_pair(h, move));
 
-	move[0] = 'D';
-	move[1] = '2';
-	move[2] = '\0';
-    minHeap_States.push(make_pair(h, _strdup(move)));
+        this->D();
 
-    this->D2();
+        //check for D2
+        this->D2();
 
-    //check for B
-    this->B();
+        h = GetHeuristic();
 
-    h = GetHeuristic();
+        move = 12;
+        minHeap_States.push(make_pair(h, move));
 
-	move[0] = 'B';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        this->D2();
 
-    this->B_P();
+    }
 
-    //check for B_P
-    this->B_P();
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 4)) {
+        //check for F
+        this->F();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-    move[0] = 'B';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 13;
+        minHeap_States.push(make_pair(h, move));
 
-    this->B();
+        this->F_P();
 
-    //check for B2
-    this->B2();
+        //check for F_P
+        this->F_P();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-	move[0] = 'B';
-	move[1] = '2';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 14;
+        minHeap_States.push(make_pair(h, move));
 
-    this->B2();
+        this->F();
 
-    //check for F
-    this->F();
+        //check for F2
+        this->F2();
 
-    h = GetHeuristic();
+        h = GetHeuristic();
 
-	move[0] = 'F';
-	move[1] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        move = 15;
+        minHeap_States.push(make_pair(h, move));
 
-    this->F_P();
+        this->F2();
 
-    //check for F_P
-    this->F_P();
+    }
 
-    h = GetHeuristic();
+    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 5)) {
+        //check for B
+        this->B();
 
-    move[0] = 'F';
-    move[1] = '\'';
-    move[2] = '\0';
-	minHeap_States.push(make_pair(h, _strdup(move)));
+        h = GetHeuristic();
 
-    this->F();
+        move = 16;
+        minHeap_States.push(make_pair(h, move));
 
-    //check for F2
-    this->F2();
+        this->B_P();
 
-    h = GetHeuristic();
+        //check for B_P
+        this->B_P();
 
-	move[0] = 'F';
-	move[1] = '2';
-	move[2] = '\0';
-    minHeap_States.push(make_pair(h, _strdup(move)));
+        h = GetHeuristic();
 
-    this->F2();
+        move = 17;
+        minHeap_States.push(make_pair(h, move));
 
+        this->B();
+
+        //check for B2
+        this->B2();
+
+        h = GetHeuristic();
+
+        move = 18;
+        minHeap_States.push(make_pair(h, move));
+
+        this->B2();
+
+    }
 
 
     while (!minHeap_States.empty()) {
-		char* _move =  minHeap_States.top().second;
-		minHeap_States.pop();
+        int _move = minHeap_States.top().second;
+		int h = minHeap_States.top().first;
+        minHeap_States.pop();
 
-        if (strcmp(_move, "R") == 0) this->R();
-        else if (strcmp(_move, "R\'") == 0) this->R_P();
-        else if (strcmp(_move, "R2") == 0) this->R2();
-        else if (strcmp(_move, "L") == 0) this->L();
-        else if (strcmp(_move, "L\'") == 0) this->L_P();
-        else if (strcmp(_move, "L2") == 0) this->L2();
-        else if (strcmp(_move, "U") == 0) this->U();
-        else if (strcmp(_move, "U\'") == 0) this->U_P();
-        else if (strcmp(_move, "U2") == 0) this->U2();
-        else if (strcmp(_move, "D") == 0) this->D();
-        else if (strcmp(_move, "D\'") == 0) this->D_P();
-        else if (strcmp(_move, "D2") == 0) this->D2();
-        else if (strcmp(_move, "B") == 0) this->B();
-        else if (strcmp(_move, "B\'") == 0) this->B_P();
-        else if (strcmp(_move, "B2") == 0) this->B2();
-        else if (strcmp(_move, "F") == 0) this->F();
-        else if (strcmp(_move, "F\'") == 0) this->F_P();
-        else if (strcmp(_move, "F2") == 0) this->F2();
+        if (turn + h >= limit) {
+			return false; // Prune branches that cannot lead to a solution within the depth limit
+        }
+
+        switch (_move) {
+        case 1: this->R(); break;
+        case 2: this->R_P(); break;
+        case 3: this->R2(); break;
+        case 4: this->L(); break;
+        case 5: this->L_P(); break;
+        case 6: this->L2(); break;
+        case 7: this->U(); break;
+        case 8: this->U_P(); break;
+        case 9: this->U2(); break;
+        case 10: this->D(); break;
+        case 11: this->D_P(); break;
+        case 12: this->D2(); break;
+        case 13: this->F(); break;
+        case 14: this->F_P(); break;
+        case 15: this->F2(); break;
+        case 16: this->B(); break;
+        case 17: this->B_P(); break;
+        case 18: this->B2(); break;
+        }
+
 
         steps[turn] = _move;
 
-        if (this->SolveHelper(turn + 1)) {
+        if (this->SolveHelper(turn + 1, limit)) {
             return true;
         }
         else {
             // Undo move
-            if (strcmp(_move, "R") == 0) this->R_P();
-            else if (strcmp(_move, "R\'") == 0) this->R();
-            else if (strcmp(_move, "R2") == 0) this->R2();
-            else if (strcmp(_move, "L") == 0) this->L_P();
-            else if (strcmp(_move, "L\'") == 0) this->L();
-            else if (strcmp(_move, "L2") == 0) this->L2();
-            else if (strcmp(_move, "U") == 0) this->U_P();
-            else if (strcmp(_move, "U\'") == 0) this->U();
-            else if (strcmp(_move, "U2") == 0) this->U2();
-            else if (strcmp(_move, "D") == 0) this->D_P();
-            else if (strcmp(_move, "D\'") == 0) this->D();
-            else if (strcmp(_move, "D2") == 0) this->D2();
-            else if (strcmp(_move, "B") == 0) this->B_P();
-            else if (strcmp(_move, "B\'") == 0) this->B();
-            else if (strcmp(_move, "B2") == 0) this->B2();
-            else if (strcmp(_move, "F") == 0) this->F_P();
-            else if (strcmp(_move, "F\'") == 0) this->F();
-            else if (strcmp(_move, "F2") == 0) this->F2();
+            switch (_move)
+            {
+            case 1: this->R_P(); break;
+            case 2: this->R(); break;
+            case 3: this->R2(); break;
+            case 4: this->L_P(); break;
+            case 5: this->L(); break;
+            case 6: this->L2(); break;
+            case 7: this->U_P(); break;
+            case 8: this->U(); break;
+            case 9: this->U2(); break;
+            case 10: this->D_P(); break;
+            case 11: this->D(); break;
+            case 12: this->D2(); break;
+            case 13: this->F_P(); break;
+            case 14: this->F(); break;
+            case 15: this->F2(); break;
+            case 16: this->B_P(); break;
+            case 17: this->B(); break;
+            case 18: this->B2(); break;
+            }
         }
     }
-
-	return false;
+    
+    return false;
 }
 
-vector<const char*> Cube::Solve() {
-    precomputeCombinations();
-
+vector<int> Cube::Solve(int limit) {
 	Cube::InitPdb();
-	Cube().PDB_BFS_CORNERS();
-    Cube().PDB_BFS_EDGES_1();
-    Cube().PDB_BFS_EDGES_2();
+	//Cube().PDB_BFS_CORNERS();
+    //Cube().PDB_BFS_EDGES_1();
+    //Cube().PDB_BFS_EDGES_2();
 
-    if (SolveHelper(0)) {
+    if (SolveHelper(0, limit)) {
         return steps;
     }
     else {
-        return {"No solution found"};
+        return {0};
     }
 
-
+	return {0};
 }

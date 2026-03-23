@@ -24,5 +24,19 @@
     <ClCompile Include="Cube.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="PDBReader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="corners.pdb">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="edges_1.pdb">
+      <Filter>Resource Files</Filter>
+    </None>
+    <None Include="edges_2.pdb">
+      <Filter>Resource Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
