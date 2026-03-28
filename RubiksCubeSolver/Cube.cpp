@@ -9,7 +9,7 @@ signed char Cube::EO_ORI[18][12];
 signed char Cube::CP_PERM[18][8];
 signed char Cube::CO_ORI[18][8];
 
-const int Cube::facts_8[8] = { 5040, 720, 120, 24, 6, 2, 1, 1 };
+const int Cube::facts_8[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
 const int Cube::facts_6[6] = { 120, 24, 6, 2, 1, 1 };
 
 int C[13][7];
@@ -28,53 +28,67 @@ void precomputeCombinations() {
     }
 }
 
-void Cube::InitPdb()
+void Cube::LoadPdb()
 {
-	// allocate memory for PDBs - used for bulding PDBs
+	// initialize the solved state in the PDBs
 
-    if (Cube::corners_pdb == nullptr)
-    {
-        Cube::corners_pdb = (unsigned char*)calloc(CORNERS_PDB_SIZE, sizeof(char));
-        if (Cube::corners_pdb == nullptr)
-        {
-            cerr << "Failed to allocate memory for PDB! - corners" << endl;
-            exit(EXIT_FAILURE);
+    const size_t sizes[] = { CORNERS_PDB_SIZE, EDGES_PDB_SIZE, EDGES_PDB_SIZE };
+    const char* files[] = { "corners.pdb", "edges_1.pdb", "edges_2.pdb" };
+    unsigned char** targets[] = { &corners_pdb, &edges_pdb_1, &edges_pdb_2 };
+
+    for (int i = 0; i < 3; i++) {
+        if (*targets[i] == nullptr) {
+			// Attempt to open the PDB file
+            FILE* f;
+            if (fopen_s(&f, files[i], "rb") != 0 || f == nullptr) {
+                cerr << "Failed to open PDB file! - " << files[i] << " (Make sure it exists in the exe folder)" << endl;
+                exit(EXIT_FAILURE);
+            }
+
+			// Allocate memory for the PDB
+            *targets[i] = (unsigned char*)malloc(sizes[i]);
+            if (*targets[i] == nullptr) {
+                fclose(f);
+                cerr << "Failed to allocate memory for PDB! - " << files[i] << endl;
+                exit(EXIT_FAILURE);
+            }
+
+			// Read the PDB data into memory
+            size_t bytesRead = fread(*targets[i], 1, sizes[i], f);
+
+            fclose(f);
+
+            if (bytesRead != sizes[i]) {
+                cerr << "Warning: PDB file " << files[i] << " seems corrupted or wrong size!" << endl;
+            }
         }
-
-        memset(corners_pdb, 0xFF, CORNERS_PDB_SIZE);
     }
+}
+void Cube::CreatePdb() {
+    const size_t sizes[] = { CORNERS_PDB_SIZE, EDGES_PDB_SIZE, EDGES_PDB_SIZE };
+    const char* files[] = { "corners.pdb", "edges_1.pdb", "edges_2.pdb" };
+    unsigned char** targets[] = { &corners_pdb, &edges_pdb_1, &edges_pdb_2 };
+    Cube solvedCube;
+	int solvedIndex = 0;
 
-    if (Cube::edges_pdb_1 == nullptr)
-    {
-        Cube::edges_pdb_1 = (unsigned char*)calloc(EDGES_PDB_SIZE, sizeof(char));
-        if (Cube::edges_pdb_1 == nullptr)
-        {
-            cerr << "Failed to allocate memory for PDB! - edges1" << endl;
-            exit(EXIT_FAILURE);
+
+    for (int i = 0; i < 3; i++) {
+        if (*targets[i] == nullptr) {
+            *targets[i] = (unsigned char*)malloc(sizes[i]);
+            if (*targets[i] == nullptr) {
+                cerr << "Failed to allocate memory for PDB! - " << files[i] << endl;
+                exit(EXIT_FAILURE);
+            }
+
+			// Initialize all entries to 255 (indicating unsolved)
+            memset(*targets[i], 255, sizes[i]);
+
+            if (i == 2) {
+				solvedIndex = solvedCube.CalcEdgesIndex_2();
+            }
+            (*targets[i])[solvedIndex] = 0;
         }
-
-        memset(edges_pdb_1, 0xFF, EDGES_PDB_SIZE);
-    }
-
-    if (Cube::edges_pdb_2 == nullptr)
-    {
-        Cube::edges_pdb_2 = (unsigned char*)calloc(EDGES_PDB_SIZE, sizeof(char));
-        if (Cube::edges_pdb_2 == nullptr)
-        {
-            cerr << "Failed to allocate memory for PDB! - edges2" << endl;
-            exit(EXIT_FAILURE);
-        }
-
-        memset(edges_pdb_2, 0xFF, EDGES_PDB_SIZE);
-    }
-
-	Cube solvedCube;
-    Cube::corners_pdb[0] = 0;
-	Cube::edges_pdb_1[0] = 0;
-    Cube::edges_pdb_2[solvedCube.CalcEdgesIndex_2()] = 0;
-
-
-
+	}
 }
 
 void Cube::ManualApplyMove(int face) {
@@ -101,28 +115,28 @@ void Cube::ManualApplyMove(int face) {
         break;
 
     case 1: // F (Front)
-        setC(2, 1, 1); setC(1, 0, 2); setC(0, 5, 1); setC(5, 2, 2);
-        setE(3, 7, true); setE(7, 11, true); setE(11, 8, true); setE(8, 3, true);
+        setC(3, 2, 1); setC(2, 6, 2); setC(6, 7, 1); setC(7, 3, 2);
+        setE(2, 5, true); setE(5, 10, true); setE(10, 6, true); setE(6, 2, true);
         break;
 
     case 2: // R (Right)
-        setC(1, 6, 1); setC(6, 7, 2); setC(7, 2, 1); setC(2, 1, 2);
-        setE(2, 6, false); setE(6, 10, false); setE(10, 1, false); setE(1, 2, false);
+        setC(1, 2, 1); setC(2, 6, 2); setC(6, 5, 1); setC(5, 1, 2);
+        setE(1, 2, false); setE(2, 6, false); setE(6, 5, false); setE(5, 1, false);
         break;
 
     case 3: // B (Back)
-        setC(0, 3, 1); setC(3, 2, 2); setC(2, 7, 1); setC(7, 0, 2);
-        setE(1, 5, true); setE(5, 9, true); setE(9, 6, true); setE(6, 1, true);
+        setC(0, 4, 1); setC(4, 5, 2); setC(5, 1, 1); setC(1, 0, 2);
+        setE(0, 4, true); setE(4, 9, true); setE(9, 1, true); setE(1, 0, true);
         break;
 
     case 4: // L (Left)
-        setC(0, 3, 1); setC(3, 4, 2); setC(4, 5, 1); setC(5, 0, 2);
-        setE(8, 11, false); setE(11, 4, false); setE(4, 9, false); setE(9, 8, false);
+        setC(0, 3, 1); setC(3, 7, 2); setC(7, 4, 1); setC(4, 0, 2);
+        setE(3, 7, false); setE(7, 11, false); setE(11, 4, false); setE(4, 3, false);
         break;
 
     case 5: // D (Down)
-        setC(4, 5, 0); setC(5, 6, 0); setC(6, 7, 0); setC(7, 4, 0);
-        setE(4, 5, false); setE(5, 6, false); setE(6, 7, false); setE(7, 4, false);
+        setC(4, 7, 0); setC(7, 6, 0); setC(6, 5, 0); setC(5, 4, 0);
+        setE(4, 7, false); setE(7, 6, false); setE(6, 5, false); setE(5, 4, false);
         break;
     }
 }
@@ -301,21 +315,27 @@ void Cube::Scramble(int movesCount) {
         switch (face) {
         case 0: // Up (White)
             if (type == 0) U(); else if (type == 1) U_P(); else U2();
+            if (type == 0) cout << "U "; else if (type == 1) cout << "U' "; else cout << "U2 ";
             break;
         case 1: // Front (Green)
             if (type == 0) F(); else if (type == 1) F_P(); else F2();
+            if (type == 0) cout << "F "; else if (type == 1) cout << "F' "; else cout << "F2 ";
             break;
         case 2: // Right (Red)
             if (type == 0) R(); else if (type == 1) R_P(); else R2();
+            if (type == 0) cout << "R "; else if (type == 1) cout << "R' "; else cout << "R2 ";
             break;
         case 3: // Back (Blue)
             if (type == 0) B(); else if (type == 1) B_P(); else B2();
+            if (type == 0) cout << "B "; else if (type == 1) cout << "B' "; else cout << "B2 ";
             break;
         case 4: // Left (Orange)
             if (type == 0) L(); else if (type == 1) L_P(); else L2();
+            if (type == 0) cout << "L "; else if (type == 1) cout << "L' "; else cout << "L2 ";
             break;
         case 5: // Down (Yellow)
             if (type == 0) D(); else if (type == 1) D_P(); else D2();
+            if (type == 0) cout << "D "; else if (type == 1) cout << "D' "; else cout << "D2 ";
             break;
         }
 
@@ -399,7 +419,7 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
     int numbers[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
 
 	//calculate the count of bigger numbers for each position in the permutation from the index
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 7; ++i)
     {
 		// calculate the count of bigger numbers for position i
         int count = permutationIndex / facts_8[i];
@@ -414,6 +434,7 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
             numbers[j] = numbers[j + 1];
         }
     }
+    current_cp[7] = numbers[0];
 
 	int orientationIndex = index % 2187;
 	int current_co[8] = {};
@@ -447,7 +468,7 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
 
         int permutationIndex = 0;
 
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < 7; ++i) {
             int count = 0;
             for (int j = i + 1; j < 8; ++j) {
                 if (child_cp[j] < child_cp[i]) {
@@ -458,7 +479,6 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
         }
 
         int orientationIndex = 0;
-
         int powOf3 = 1;
 
         for (int i = 0; i < 7; ++i)
@@ -478,7 +498,7 @@ void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
 int Cube::CalcCornerIndex() {
     int permutationIndex = 0;
 
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 7; ++i) {
         int count = 0;
         for (int j = i + 1; j < 8; ++j) {
             if (cp[j] < cp[i]) {
@@ -488,7 +508,7 @@ int Cube::CalcCornerIndex() {
         permutationIndex += (count * facts_8[i]);
     }
 
-	int orientationIndex = 0;
+    int orientationIndex = 0;
 
 	int powOf3 = 1;
 
@@ -500,7 +520,6 @@ int Cube::CalcCornerIndex() {
 
 	return permutationIndex * 2187 + orientationIndex; // Final index combining permutation and orientation
 }
-
 void Cube::PDB_BFS_CORNERS() {
     bool foundNew = true;
     int turn = 0;
@@ -567,7 +586,7 @@ int Cube::CalcEdgesIndex_1() {
         int orientations[6];
         int found = 0;
 
-        // סריקת כל 12 המקומות בקובייה
+		// scan all 12 positions in the cube to find the edges that belong to the first group (0-5) and store their positions, IDs, and orientations
         for (int i = 0; i < 12; i++) {
             if (ep[i] >= 0 && ep[i] <= 5) {
                 occupiedPositions[found] = i;
@@ -577,12 +596,12 @@ int Cube::CalcEdgesIndex_1() {
             }
         }
 
-	    int combinationIndex = 0;
+        int combinationIndex = 0;
 
         for (int i = 0; i < 6; ++i)
         {
 		    combinationIndex += C[occupiedPositions[i]][i + 1];
-	    }
+            }
 
 	    // calculate permutation index of the 6 edges in the first group
 	    int permutationIndex = 0;
@@ -620,7 +639,7 @@ int Cube::CalcEdgesIndex_2() {
     int orientations[6];
     int found = 0;
 
-    // סריקת כל 12 המקומות בקובייה
+	// scan all 12 positions in the cube to find the edges that belong to the first group (6-11) and store their positions, IDs, and orientations
     for (int i = 0; i < 12; i++) {
         if (ep[i] >= 6 && ep[i] <= 11) {
             occupiedPositions[found] = i;
@@ -630,12 +649,12 @@ int Cube::CalcEdgesIndex_2() {
         }
     }
 
-	int combinationIndex = 0;
+    int combinationIndex = 0;
 
     for (int i = 0; i < 6; ++i)
     {
 		combinationIndex += C[occupiedPositions[i]][i + 1];
-	}
+        }
 
 	// calculate permutation index of the 6 edges in the first group
 	int permutationIndex = 0;
@@ -1052,321 +1071,69 @@ bool Cube::IsSolved() const {
 }
 
 int Cube::GetHeuristic() {
-    static PDBReader readerCorners("corners.pdb");
-    static PDBReader readerEdges1("edges_1.pdb");
-    static PDBReader readerEdges2("edges_2.pdb");
-
-    int h_corners = readerCorners.GetDistance(this->CalcCornerIndex());
-    int h_edges1 = readerEdges1.GetDistance(this->CalcEdgesIndex_1());
-    int h_edges2 = readerEdges2.GetDistance(this->CalcEdgesIndex_2());
+    int h_corners = corners_pdb[this->CalcCornerIndex()];
+    int h_edges1 = edges_pdb_1[this->CalcEdgesIndex_1()];
+    int h_edges2 = edges_pdb_2[this->CalcEdgesIndex_2()];
 
     int h = h_corners;
     if (h_edges1 > h) h = h_edges1;
     if (h_edges2 > h) h = h_edges2;
     return h;
 }
-bool Cube::SolveHelper(int turn, int limit) {
-    cout << turn << ": ";
-    for (int i = 0; i < turn; ++i) {
-        if (steps[i] != 0) {
-            cout << steps[i] << " ";
-        }
+
+bool Cube::ShouldSkipMove(int currentFace, int lastFace) {
+    if (currentFace == lastFace) return true;
+	// skip moves that undo the last move (e.g., if the last move was on face 0, skip moves on face 5, etc.)
+    if ((currentFace == 0 && lastFace == 5) ||
+        (currentFace == 1 && lastFace == 3) ||
+        (currentFace == 2 && lastFace == 4)) {
+        return currentFace < lastFace;
     }
-    cout << endl;
-
-    if (this->IsSolved()) {
-        Cube::steps[turn] = 0;
-        return true;
-    }
-
-
-    if (turn >= limit) {
-        Cube::steps[turn - 1] = 0;
-        return false;
-    }
-
-    priority_queue<pair<int, int>, vector<pair<int, int>>, PairFirstComparator> minHeap_States;
-    int h;
-
-    int move;
-
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 0)) {
-        //check for R
-        this->R();
-
-        h = GetHeuristic();
-
-        move = 1;
-        minHeap_States.push(make_pair(h, move));
-
-        this->R_P();
-
-        //check for R_P
-        this->R_P();
-
-        h = GetHeuristic();
-
-        move = 2;
-        minHeap_States.push(make_pair(h, move));
-
-        this->R();
-
-        //check for R2
-        this->R2();
-
-        h = GetHeuristic();
-
-        move = 3;
-        minHeap_States.push(make_pair(h, move));
-
-        this->R2();
-
-    }
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 1)) {
-        //check for L
-        this->L();
-
-        h = GetHeuristic();
-
-        move = 4;
-        minHeap_States.push(make_pair(h, move));
-
-        this->L_P();
-
-        //check for L_P
-        this->L_P();
-
-        h = GetHeuristic();
-
-        move = 5;
-        minHeap_States.push(make_pair(h, move));
-
-        this->L();
-
-        //check for L2
-        this->L2();
-
-        h = GetHeuristic();
-
-        move = 6;
-        minHeap_States.push(make_pair(h, move));
-
-        this->L2();
-
-    }
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 2)) {
-        //check for U
-        this->U();
-
-        h = GetHeuristic();
-
-        move = 7;
-        minHeap_States.push(make_pair(h, move));
-
-        this->U_P();
-
-        //check for U_P
-        this->U_P();
-
-        h = GetHeuristic();
-
-        move = 8;
-        minHeap_States.push(make_pair(h, move));
-
-        this->U();
-
-        //check for U2
-        this->U2();
-
-        h = GetHeuristic();
-
-        move = 9;
-        minHeap_States.push(make_pair(h, move));
-
-        this->U2();
-
-    }
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 3)) {
-        //check for D
-        this->D();
-
-        h = GetHeuristic();
-
-        move = 10;
-        minHeap_States.push(make_pair(h, move));
-
-        this->D_P();
-
-        //check for D_P
-        this->D_P();
-
-        h = GetHeuristic();
-
-        move = 11;
-        minHeap_States.push(make_pair(h, move));
-
-        this->D();
-
-        //check for D2
-        this->D2();
-
-        h = GetHeuristic();
-
-        move = 12;
-        minHeap_States.push(make_pair(h, move));
-
-        this->D2();
-
-    }
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 4)) {
-        //check for F
-        this->F();
-
-        h = GetHeuristic();
-
-        move = 13;
-        minHeap_States.push(make_pair(h, move));
-
-        this->F_P();
-
-        //check for F_P
-        this->F_P();
-
-        h = GetHeuristic();
-
-        move = 14;
-        minHeap_States.push(make_pair(h, move));
-
-        this->F();
-
-        //check for F2
-        this->F2();
-
-        h = GetHeuristic();
-
-        move = 15;
-        minHeap_States.push(make_pair(h, move));
-
-        this->F2();
-
-    }
-
-    if (turn == 0 || (turn > 0 && (steps[turn - 1] - 1) / 3 != 5)) {
-        //check for B
-        this->B();
-
-        h = GetHeuristic();
-
-        move = 16;
-        minHeap_States.push(make_pair(h, move));
-
-        this->B_P();
-
-        //check for B_P
-        this->B_P();
-
-        h = GetHeuristic();
-
-        move = 17;
-        minHeap_States.push(make_pair(h, move));
-
-        this->B();
-
-        //check for B2
-        this->B2();
-
-        h = GetHeuristic();
-
-        move = 18;
-        minHeap_States.push(make_pair(h, move));
-
-        this->B2();
-
-    }
-
-
-    while (!minHeap_States.empty()) {
-        int _move = minHeap_States.top().second;
-		int h = minHeap_States.top().first;
-        minHeap_States.pop();
-
-        if (turn + h >= limit) {
-			return false; // Prune branches that cannot lead to a solution within the depth limit
-        }
-
-        switch (_move) {
-        case 1: this->R(); break;
-        case 2: this->R_P(); break;
-        case 3: this->R2(); break;
-        case 4: this->L(); break;
-        case 5: this->L_P(); break;
-        case 6: this->L2(); break;
-        case 7: this->U(); break;
-        case 8: this->U_P(); break;
-        case 9: this->U2(); break;
-        case 10: this->D(); break;
-        case 11: this->D_P(); break;
-        case 12: this->D2(); break;
-        case 13: this->F(); break;
-        case 14: this->F_P(); break;
-        case 15: this->F2(); break;
-        case 16: this->B(); break;
-        case 17: this->B_P(); break;
-        case 18: this->B2(); break;
-        }
-
-
-        steps[turn] = _move;
-
-        if (this->SolveHelper(turn + 1, limit)) {
-            return true;
-        }
-        else {
-            // Undo move
-            switch (_move)
-            {
-            case 1: this->R_P(); break;
-            case 2: this->R(); break;
-            case 3: this->R2(); break;
-            case 4: this->L_P(); break;
-            case 5: this->L(); break;
-            case 6: this->L2(); break;
-            case 7: this->U_P(); break;
-            case 8: this->U(); break;
-            case 9: this->U2(); break;
-            case 10: this->D_P(); break;
-            case 11: this->D(); break;
-            case 12: this->D2(); break;
-            case 13: this->F_P(); break;
-            case 14: this->F(); break;
-            case 15: this->F2(); break;
-            case 16: this->B_P(); break;
-            case 17: this->B(); break;
-            case 18: this->B2(); break;
-            }
-        }
-    }
-    
     return false;
 }
 
+bool Cube::SolveHelper(int turn, int limit, int lastFace) {
+    int h = GetHeuristic();
+
+    if (turn + h > limit) return false;
+    if (this->IsSolved()) return true;
+
+    for (int f = 0; f < 6; f++) {
+        if (f == lastFace) continue;
+        if (ShouldSkipMove(f, lastFace)) continue;
+
+        for (int t = 1; t <= 3; t++) {
+            ApplyMove(f, t);
+			steps[turn] = f * 3 + (t - 1) + 1; // Store the move (1-18) in the steps array
+
+            if (SolveHelper(turn + 1, limit, f)) return true;
+
+            ApplyMove(f, 4 - t); // Undo
+        }
+    }
+    return false;
+}
 vector<int> Cube::Solve(int limit) {
-	Cube::InitPdb();
-	//Cube().PDB_BFS_CORNERS();
-    //Cube().PDB_BFS_EDGES_1();
-    //Cube().PDB_BFS_EDGES_2();
 
-    if (SolveHelper(0, limit)) {
-        return steps;
-    }
-    else {
-        return {0};
+	/*Cube::CreatePdb();
+    Cube().PDB_BFS_CORNERS();
+    cout << "Finished corners PDB" << endl;
+    Cube().PDB_BFS_EDGES_1();
+    cout << "Finished edges 1 PDB" << endl;
+    Cube().PDB_BFS_EDGES_2();
+    cout << "Finished edges 2 PDB" << endl;*/
+
+    Cube::LoadPdb();
+    int initial_h = GetHeuristic();
+    cout << "Initial Heuristic (Minimum steps required): " << initial_h << endl;
+    cout << endl << "Solving..." << endl;
+
+    for (int limit = initial_h; limit <= 20; limit++) {
+        cout << "Searching depth " << limit << "..." << endl;
+           if (SolveHelper(0, limit, -1)) {
+            return steps;
+        }
     }
 
-	return {0};
+    return { 0 };
 }

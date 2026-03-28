@@ -55,7 +55,8 @@ public:
 	Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]);
 
 private:
-	static void InitPdb();
+	static void LoadPdb();
+	static void CreatePdb();
 
 public:
 	static void InitMoveTables();
@@ -115,8 +116,9 @@ public:
 
 private:
 	int GetHeuristic();
+	bool ShouldSkipMove(int currentFace, int lastFace);
 	bool IsSolved() const;
-	bool SolveHelper(int turn = 0, int limit = 20);
+	bool SolveHelper(int turn, int limit, int lastFace);
 
 public:
 	vector<int> Solve(int limit);
