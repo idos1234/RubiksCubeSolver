@@ -130,10 +130,11 @@
     <ClCompile Include="Cube.cpp" />
     <ClCompile Include="cube.h" />
     <ClCompile Include="index.cpp" />
-    <ClCompile Include="PDBReader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="corners.pdb" />
+    <None Include="edges1_move.table" />
+    <None Include="edges2_move.table" />
     <None Include="edges_1.pdb" />
     <None Include="edges_2.pdb" />
   </ItemGroup>

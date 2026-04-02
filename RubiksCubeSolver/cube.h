@@ -5,9 +5,6 @@
 #include <queue>
 #include <vector>
 
-#include "PDBReader.cpp"
-
-
 #define CUBESIZE 3
 #define CORNERS_PDB_SIZE 88179840
 #define EDGES_PDB_SIZE 42577920
@@ -38,6 +35,12 @@ private:
 	static signed char EP_PERM[18][12];
 	static signed char EO_ORI[18][12];
 
+	static int CP_MoveTable[40320][18];
+	static int CO_MoveTable[2187][18];
+
+	static int (*Edges1_MoveTable)[18];
+	static int (*Edges2_MoveTable)[18];
+
 	int numOfTurns;
 
 	vector<int> steps;
@@ -54,12 +57,19 @@ public:
 	Cube();
 	Cube(const char _cubeMat[6][CUBESIZE][CUBESIZE]);
 
+	void ResetCubeEdges();
+
 private:
 	static void LoadPdb();
 	static void CreatePdb();
+	static void LoadEdgesMoveTables();
 
 public:
 	static void InitMoveTables();
+	static void GenerateCPMoveTable();
+	static void GenerateCOMoveTable();
+	static void GenerateEdges1MoveTable();
+	static void GenerateEdges2MoveTable();
 
 
 private:
@@ -69,8 +79,14 @@ private:
 
 	//dfs for building the PDB for corners
 	void PDB_BFS_CORNERS();
-	void UpdateTurnForChildren_Corners(int turn, int index);
 	int CalcCornerIndex();
+
+	int CalcCornerOrientationIndex();
+	void DecodeCornerOrientation(int index);
+
+	int CalcCornerPermutationIndex();
+	void DecodeCornerPermutation(int index);
+
 	int FindCornerNum(char c1, char c2, char c3);
 	bool CornerComp(char a1, char b1, char c1, char a2, char b2, char c2);
 	pair<int, int> IdentifyCorner(const char cubeMat[6][CUBESIZE][CUBESIZE], int position);
@@ -80,9 +96,29 @@ private:
 	bool EdgeComp(char a1, char b1, char a2, char b2);
 	int FindEdgeNum(char a, char b);
 	int CalcEdgesIndex_1();
+	void DecodeEdges_1(int fullIndex);
+
 	int CalcEdgesIndex_2();
-	void UpdateTurnForChildren_Edges1(int turn, int index);
-	void UpdateTurnForChildren_Edges2(int turn, int index);
+	void DecodeEdges_2(int fullIndex);
+
+	int CalcEdgeOrientationIndex_1();
+	void DecodeEdgeOrientation_1(int index, int* activePositions);
+
+	int CalcEdgePermutationIndex_1();
+	void DecodeEdgePermutation_1(int index, int* activePositions);
+
+	int CalcEdgePositionIndex_1();
+	void DecodeEdgePosition_1(int index, int* activePositions);
+
+	int CalcEdgeOrientationIndex_2();
+	void DecodeEdgeOrientation_2(int index, int* activePositions);
+
+	int CalcEdgePermutationIndex_2();
+	void DecodeEdgePermutation_2(int index, int* activePositions);
+
+	int CalcEdgePositionIndex_2();
+	void DecodeEdgePosition_2(int index, int* activePositions);
+
 	void PDB_BFS_EDGES_1();
 	void PDB_BFS_EDGES_2();
 
@@ -115,10 +151,9 @@ public:
 	static void FreePdb();
 
 private:
-	int GetHeuristic();
+	int GetHeuristic(int cpIdx, int coIdx, int e1Idx, int e2Idx);
 	bool ShouldSkipMove(int currentFace, int lastFace);
-	bool IsSolved() const;
-	bool SolveHelper(int turn, int limit, int lastFace);
+	bool SolveHelper(int turn, int limit, int lastFace, int cpIdx, int coIdx, int e1Idx, int e2Idx);
 
 public:
 	vector<int> Solve(int limit);

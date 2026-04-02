@@ -9,6 +9,11 @@ signed char Cube::EO_ORI[18][12];
 signed char Cube::CP_PERM[18][8];
 signed char Cube::CO_ORI[18][8];
 
+int Cube::CP_MoveTable[40320][18];
+int Cube::CO_MoveTable[2187][18];
+int (*Cube::Edges1_MoveTable)[18] = nullptr;
+int (*Cube::Edges2_MoveTable)[18] = nullptr;
+
 const int Cube::facts_8[8] = { 5040, 720, 120, 24, 6, 2, 1, 0 };
 const int Cube::facts_6[6] = { 120, 24, 6, 2, 1, 1 };
 
@@ -141,6 +146,7 @@ void Cube::ManualApplyMove(int face) {
     }
 }
 void Cube::InitMoveTables() {
+    LoadEdgesMoveTables();
     for (int f = 0; f < 6; f++) {
         for (int t = 1; t <= 3; t++) {
             int moveIdx = f * 3 + (t - 1);
@@ -162,6 +168,144 @@ void Cube::InitMoveTables() {
             }
         }
     }
+}
+
+void Cube::GenerateCPMoveTable() {
+    Cube cube;
+
+    for (int i = 0; i < 40320; i++) {
+        // set cube state by index
+        cube.DecodeCornerPermutation(i);
+
+        for (int move = 0; move < 18; move++) {
+            // do move
+            int face = move / 3;
+            int times = (move % 3) + 1;
+            cube.ApplyMove(face, times);
+
+            // save new index in the table
+            CP_MoveTable[i][move] = cube.CalcCornerPermutationIndex();
+
+			//undo move
+			cube.ApplyMove(face, 4 - times);
+        }
+    }
+}
+void Cube::GenerateCOMoveTable() {
+    Cube cube;
+
+    for (int i = 0; i < 2187; i++) {
+        // set cube state by index
+        cube.DecodeCornerOrientation(i);
+
+        for (int move = 0; move < 18; move++) {
+            // do move
+            int face = move / 3;
+            int times = (move % 3) + 1;
+            cube.ApplyMove(face, times);
+
+            // save new index in the table
+            CO_MoveTable[i][move] = cube.CalcCornerOrientationIndex();
+
+            // undo move
+			cube.ApplyMove(face, 4 - times);
+        }
+    }
+}
+
+void Cube::GenerateEdges1MoveTable() {
+    Cube cube;
+
+    for (int i = 0; i < EDGES_PDB_SIZE; ++i)
+    {
+		cube.DecodeEdges_1(i);
+
+        for (int move = 0; move < 18; ++move)
+        {
+            int face = move / 3;
+            int times = (move % 3) + 1;
+            cube.ApplyMove(face, times);
+
+			int newIndex = cube.CalcEdgesIndex_1();
+
+            Edges1_MoveTable[i][move] = newIndex;
+
+            // undo move
+			cube.ApplyMove(face, 4 - times);
+        }
+    }
+
+    FILE* f;
+    errno_t err = fopen_s(&f, "edges1_move.table", "wb");
+
+    if (err == 0) {
+        fwrite(Edges1_MoveTable, sizeof(int) * 18, EDGES_PDB_SIZE, f);
+        fclose(f);
+    }
+    else {
+        cerr << "Error opening file for writing: " << err << endl;
+    }
+}
+void Cube::GenerateEdges2MoveTable() {
+    Cube cube;
+
+    for (int i = 0; i < EDGES_PDB_SIZE; ++i)
+    {
+		cube.DecodeEdges_2(i);
+
+        for (int move = 0; move < 18; ++move)
+        {
+            int face = move / 3;
+            int times = (move % 3) + 1;
+            cube.ApplyMove(face, times);
+
+			int newIndex = cube.CalcEdgesIndex_2();
+
+            Edges2_MoveTable[i][move] = newIndex;
+
+            // undo move
+			cube.ApplyMove(face, 4 - times);
+        }
+    }
+
+    FILE* f;
+    errno_t err = fopen_s(&f, "edges2_move.table", "wb");
+
+    if (err == 0) {
+        fwrite(Edges2_MoveTable, sizeof(int) * 18, EDGES_PDB_SIZE, f);
+        fclose(f);
+    }
+    else {
+        cerr << "Error opening file for writing: " << err << endl;
+    }
+}
+
+void Cube::LoadEdgesMoveTables() {
+    FILE* f1;
+    if (fopen_s(&f1, "edges1_move.table", "rb") != 0) exit(EXIT_FAILURE);
+
+    FILE* f2;
+    if (fopen_s(&f2, "edges2_move.table", "rb") != 0) {
+        fclose(f1);
+        exit(EXIT_FAILURE);
+    }
+
+    cout << "Loading Move Tables from disk..." << endl;
+
+    // הקצאת זיכרון ב-Heap
+    Edges1_MoveTable = (int (*)[18])malloc((long long)EDGES_PDB_SIZE * 18 * sizeof(int));
+    Edges2_MoveTable = (int (*)[18])malloc((long long)EDGES_PDB_SIZE * 18 * sizeof(int));
+
+    if (!Edges1_MoveTable || !Edges2_MoveTable) {
+        cerr << "Memory allocation failed during load!" << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    fread(Edges1_MoveTable, sizeof(int) * 18, EDGES_PDB_SIZE, f1);
+    fread(Edges2_MoveTable, sizeof(int) * 18, EDGES_PDB_SIZE, f2);
+
+    fclose(f1);
+    fclose(f2);
 }
 
 void Cube::FreePdb() {
@@ -411,91 +555,53 @@ int Cube::FindCornerNum(char a, char b, char c) {
 
     return -1;
 }
-void Cube::UpdateTurnForChildren_Corners(int turn, int index) {
-    int current_cp[8] = {};
-	int biggerCount[8] = {};
-    int permutationIndex = index / 2187;
-
-    int numbers[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
-
-	//calculate the count of bigger numbers for each position in the permutation from the index
-    for (int i = 0; i < 7; ++i)
-    {
-		// calculate the count of bigger numbers for position i
-        int count = permutationIndex / facts_8[i];
-        permutationIndex %= facts_8[i];
-
-		// find the actual number for position i based on the count of bigger numbers
-        current_cp[i] = numbers[count];
-
-		// manually remove the used number from the list of available numbers
-        for (int j = count; j < 7 - i; ++j)
-        {
-            numbers[j] = numbers[j + 1];
-        }
-    }
-    current_cp[7] = numbers[0];
-
-	int orientationIndex = index % 2187;
-	int current_co[8] = {};
-    int orientationSum = 0;
-    //calculate the orientation of each corner from the index
-    for (int i = 0; i < 7; ++i)
-    {
-        current_co[i] = orientationIndex % 3;
-        orientationSum += current_co[i];
-        orientationIndex /= 3;
-	}
-
-    // calculate the orientation of the last corner based on the first 7 (the sum of all orientations must be divisible by 3)
-	current_co[7] = (3 - (orientationSum % 3)) % 3;
-
-	//generate child states for each possible move
-    for (int m = 0; m < 18; ++m)
-    {
-        int child_cp[8];
-        int child_co[8];
-
-		//apply the move to the corners
-        for (int i = 0; i < 8; ++i) {
-            child_cp[i] = current_cp[CP_PERM[m][i]];
-            child_co[i] = (current_co[CP_PERM[m][i]] + CO_ORI[m][i] + 3) % 3;
-        }
-
-
-		//calculate the index of the child state
-		int childIndex = 0;
-
-        int permutationIndex = 0;
-
-        for (int i = 0; i < 7; ++i) {
-            int count = 0;
-            for (int j = i + 1; j < 8; ++j) {
-                if (child_cp[j] < child_cp[i]) {
-                    ++count;
-                }
-            }
-            permutationIndex += (count * facts_8[i]);
-        }
-
-        int orientationIndex = 0;
-        int powOf3 = 1;
-
-        for (int i = 0; i < 7; ++i)
-        {
-            orientationIndex += child_co[i] * powOf3;
-            powOf3 *= 3;
-        }
-
-		childIndex = permutationIndex * 2187 + orientationIndex;
-
-		//update index in PDB if not visited before
-        if (Cube::corners_pdb[childIndex] == 255) {
-            Cube::corners_pdb[childIndex] = turn + 1;
-        }
-    }
-}
 int Cube::CalcCornerIndex() {
+    return (CalcCornerPermutationIndex() * 2187) + CalcCornerOrientationIndex();
+}
+
+void Cube::DecodeCornerOrientation(int index) {
+    int orientationSum = 0;
+
+    for (int i = 0; i < 7; ++i)
+    {
+        co[i] = index % 3;
+        orientationSum += co[i];
+        index /= 3;
+    }
+
+    co[7] = (3 - (orientationSum % 3)) % 3;
+}
+int Cube::CalcCornerOrientationIndex() {
+    int orientationIndex = 0;
+    int powOf3 = 1;
+
+    for (int i = 0; i < 7; ++i)
+    {
+        orientationIndex += co[i] * powOf3;
+        powOf3 *= 3;
+    }
+
+    return orientationIndex;
+}
+
+void Cube::DecodeCornerPermutation(int index) {
+    int corners[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+
+    for (int i = 0; i < 7; ++i)
+    {
+        int pos = index / facts_8[i];
+		cp[i] = corners[pos];
+		index %= facts_8[i];
+
+		// delete the used corner from the list of available corners
+        for (int j = pos; j < 7 - i; j++) {
+            corners[j] = corners[j + 1];
+        }
+    }
+
+    cp[7] = corners[0];
+}
+int Cube::CalcCornerPermutationIndex() {
     int permutationIndex = 0;
 
     for (int i = 0; i < 7; ++i) {
@@ -508,18 +614,9 @@ int Cube::CalcCornerIndex() {
         permutationIndex += (count * facts_8[i]);
     }
 
-    int orientationIndex = 0;
-
-	int powOf3 = 1;
-
-    for (int i = 0; i < 7; ++i)
-    {
-        orientationIndex += co[i] * powOf3;
-		powOf3 *= 3;
-    }
-
-	return permutationIndex * 2187 + orientationIndex; // Final index combining permutation and orientation
+    return permutationIndex;
 }
+
 void Cube::PDB_BFS_CORNERS() {
     bool foundNew = true;
     int turn = 0;
@@ -530,7 +627,22 @@ void Cube::PDB_BFS_CORNERS() {
         for (int i = 0; i < CORNERS_PDB_SIZE; ++i)
         {
             if (Cube::corners_pdb[i] == turn) {
-                Cube::UpdateTurnForChildren_Corners(turn, i);
+                int cpIdx = i / 2187;
+                int coIdx = i % 2187;
+
+				// update childern states based on the move tables
+                for (int move = 0; move < 18; ++move) {
+                    int nextCP = CP_MoveTable[cpIdx][move];
+                    int nextCO = CO_MoveTable[coIdx][move];
+
+                    int childIndex = (nextCP * 2187) + nextCO;
+                        
+					// if this state hasn't been reached before, set its value to the current turn + 1 and mark that we found a new state
+                    if (Cube::corners_pdb[childIndex] == 255) {
+                        Cube::corners_pdb[childIndex] = (unsigned char)(turn + 1);
+                        foundNew = true;
+                    }
+                }
 				foundNew = true;
             }
         }
@@ -580,86 +692,91 @@ int Cube::FindEdgeNum(char a, char b) {
 
     return -1;
 }
-int Cube::CalcEdgesIndex_1() {
-	    int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
-	    int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
-        int orientations[6];
-        int found = 0;
 
-		// scan all 12 positions in the cube to find the edges that belong to the first group (0-5) and store their positions, IDs, and orientations
-        for (int i = 0; i < 12; i++) {
-            if (ep[i] >= 0 && ep[i] <= 5) {
-                occupiedPositions[found] = i;
-                edgeIDs[found] = ep[i];
-                orientations[found] = eo[i];
-                found++;
-            }
-        }
-
-        int combinationIndex = 0;
-
-        for (int i = 0; i < 6; ++i)
-        {
-		    combinationIndex += C[occupiedPositions[i]][i + 1];
-            }
-
-	    // calculate permutation index of the 6 edges in the first group
-	    int permutationIndex = 0;
-
-        for (int i = 0; i < 6; ++i)
-        {
-            int count = 0;
-            for (int j = i + 1; j < 6; ++j)
-            {
-                if (edgeIDs[j] < edgeIDs[i]) {
-                    ++count;
-                }
-            }
-            permutationIndex += (count * facts_6[i]);
-        }
-
-        // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
-	    int indexPos = combinationIndex * 720 + permutationIndex;
-
-	    //calculate orientation index of the 6 edges in the first group
-	    int orientationIndex = 0;
-        int PowerOf2 = 1;
-
-        for (int i = 0; i < 6; ++i)
-        {
-            orientationIndex += orientations[i] * PowerOf2;
-            PowerOf2 *= 2;
-        }
-
-        return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
+void Cube::ResetCubeEdges() {
+    for (int i = 0; i < 12; i++) {
+        ep[i] = -1;
+        eo[i] = 0;
     }
+}
+
+int Cube::CalcEdgesIndex_1() {
+    return (CalcEdgePositionIndex_1() * 720 * 64) + (CalcEdgePermutationIndex_1() * 64) + CalcEdgeOrientationIndex_1();
+}
+void Cube::DecodeEdges_1(int fullIndex) {
+	ResetCubeEdges();
+
+    int oriIndex = fullIndex % 64;
+    int permIndex = (fullIndex / 64) % 720;
+    int posIndex = fullIndex / (64 * 720);
+
+    int activePositions[6];
+    DecodeEdgePosition_1(posIndex, activePositions);
+    DecodeEdgePermutation_1(permIndex, activePositions);
+    DecodeEdgeOrientation_1(oriIndex, activePositions);
+}
+
 int Cube::CalcEdgesIndex_2() {
-	int occupiedPositions[6]; // indexes of the 6 edges in the first group (0-11)
-	int edgeIDs[6];           // indexes ordered by their position in the cube (0-5)
-    int orientations[6];
+    return (CalcEdgePositionIndex_2() * 720 * 64) + (CalcEdgePermutationIndex_2() * 64) + CalcEdgeOrientationIndex_2();
+}
+void Cube::DecodeEdges_2(int fullIndex) {
+	ResetCubeEdges();
+
+    int oriIndex = fullIndex % 64;
+    int permIndex = (fullIndex / 64) % 720;
+    int posIndex = fullIndex / (64 * 720);
+
+    int activePositions[6];
+    DecodeEdgePosition_2(posIndex, activePositions);
+    DecodeEdgePermutation_2(permIndex, activePositions);
+    DecodeEdgeOrientation_2(oriIndex, activePositions);
+}
+
+int Cube::CalcEdgeOrientationIndex_1() {
+    int orientations[12] = {};
+    int orientationIndex = 0;
+    int PowerOf2 = 1;
     int found = 0;
 
-	// scan all 12 positions in the cube to find the edges that belong to the first group (6-11) and store their positions, IDs, and orientations
     for (int i = 0; i < 12; i++) {
-        if (ep[i] >= 6 && ep[i] <= 11) {
-            occupiedPositions[found] = i;
-            edgeIDs[found] = ep[i] - 6;
-            orientations[found] = eo[i];
+        if (ep[i] >= 0 && ep[i] <= 5) {
+            if (found < 6) {
+                orientations[found] = eo[i];
+            }
             found++;
         }
     }
 
-    int combinationIndex = 0;
-
     for (int i = 0; i < 6; ++i)
     {
-		combinationIndex += C[occupiedPositions[i]][i + 1];
-        }
+        orientationIndex += orientations[i] * PowerOf2;
+        PowerOf2 *= 2;
+    }
 
-	// calculate permutation index of the 6 edges in the first group
-	int permutationIndex = 0;
-
+    return orientationIndex;
+}
+void Cube::DecodeEdgeOrientation_1(int index, int* activePositions) {
     for (int i = 0; i < 6; ++i)
+    {
+        int cubePos = activePositions[i];
+        eo[cubePos] = index % 2;
+        index /= 2;
+    }
+}
+
+int Cube::CalcEdgePermutationIndex_1() {
+    int permutationIndex = 0;
+    int edgeIDs[12] = {};           // indexes ordered by their position in the cube (0-5)
+    int found = 0;
+
+    for (int i = 0; i < 12; i++) {
+        if (ep[i] >= 0 && ep[i] <= 5) {
+            edgeIDs[found] = ep[i];
+            found++;
+        }
+    }
+
+    for (int i = 0; i < 5; ++i)
     {
         int count = 0;
         for (int j = i + 1; j < 6; ++j)
@@ -671,12 +788,67 @@ int Cube::CalcEdgesIndex_2() {
         permutationIndex += (count * facts_6[i]);
     }
 
-    // formula for calculating the final index: combinationIndex * 720 (6!) + permutationIndex
-	int indexPos = combinationIndex * 720 + permutationIndex;
+    return permutationIndex;
+}
+void Cube::DecodeEdgePermutation_1(int index, int* activePositions) {
+	int availableEdges[6] = { 0, 1, 2, 3, 4, 5 };
 
-	//calculate orientation index of the 6 edges in the first group
-	int orientationIndex = 0;
+    for (int i = 0; i < 5; i++) {
+        int count = index / facts_6[i];
+        index %= facts_6[i];
+
+        int actualCubePos = activePositions[i];
+        ep[actualCubePos] = availableEdges[count];
+
+        for (int j = count; j < 5 - i; j++) {
+            availableEdges[j] = availableEdges[j + 1];
+        }
+    }
+
+    ep[activePositions[5]] = availableEdges[0];
+}
+
+int Cube::CalcEdgePositionIndex_1() {
+    int positionIndex = 0;
+    int k = 6;
+    for (int i = 11; i >= 0 && k > 0; i--) {
+        if (ep[i] >= 0 && ep[i] <= 5) {
+            positionIndex += C[i][k];
+            k--;
+        }
+    }
+    return positionIndex;
+}
+void Cube::DecodeEdgePosition_1(int index, int* activePositions) {
+    int k = 6;
+
+    for (int i = 11; i >= 0 && k > 0; --i)
+    {
+        if (C[i][k] <= index)
+        {
+            activePositions[k - 1] = i;
+            index -= C[i][k];
+            --k;
+        }
+    }
+
+    sort(activePositions, activePositions + 6);
+}
+
+int Cube::CalcEdgeOrientationIndex_2() {
+    int orientations[12] = {};
+    int orientationIndex = 0;
     int PowerOf2 = 1;
+    int found = 0;
+
+    for (int i = 0; i < 12; i++) {
+        if (ep[i] >= 6 && ep[i] <= 11) {
+            if (found < 6) {
+                orientations[found] = eo[i];
+            }
+            found++;
+        }
+    }
 
     for (int i = 0; i < 6; ++i)
     {
@@ -684,280 +856,89 @@ int Cube::CalcEdgesIndex_2() {
         PowerOf2 *= 2;
     }
 
-    return (combinationIndex * 720 + permutationIndex) * 64 + orientationIndex; // Final index combining position and orientation
+    return orientationIndex;
 }
-
-void Cube::UpdateTurnForChildren_Edges1(int turn, int index) {
-	int currentOriIdx = index % 64;
-    int tempPosIdx = index / 64;
-    int currentPermIdx = tempPosIdx % 720;
-    int currentCombIdx = tempPosIdx / 720;
-
-	// find the edge orientation from the index
-    int orientations[6] = {};
-
+void Cube::DecodeEdgeOrientation_2(int index, int* activePositions) {
     for (int i = 0; i < 6; ++i)
     {
-        orientations[i] = currentOriIdx % 2;
-		currentOriIdx /= 2;
+        int cubePos = activePositions[i];
+        eo[cubePos] = index % 2;
+        index /= 2;
+    }
+}
+
+
+int Cube::CalcEdgePermutationIndex_2() {
+    int permutationIndex = 0;
+    int edgeIDs[12] = {};           // indexes ordered by their position in the cube (6-11)
+    int found = 0;
+
+    for (int i = 0; i < 12; i++) {
+        if (ep[i] >= 6 && ep[i] <= 11) {
+            edgeIDs[found] = ep[i];
+            found++;
+        }
     }
 
-	// find the ocupied edges from the index
-	int ocupiedEdges[6] = {};
+    for (int i = 0; i < 5; ++i)
+    {
+        int count = 0;
+        for (int j = i + 1; j < 6; ++j)
+        {
+            if (edgeIDs[j] < edgeIDs[i]) {
+                ++count;
+            }
+        }
+        permutationIndex += (count * facts_6[i]);
+    }
+
+    return permutationIndex;
+}
+void Cube::DecodeEdgePermutation_2(int index, int* activePositions) {
+    int availableEdges[6] = { 6, 7, 8, 9, 10, 11 };
+
+    for (int i = 0; i < 5; i++) {
+        int count = index / facts_6[i];
+        index %= facts_6[i];
+
+        int actualCubePos = activePositions[i];
+        ep[actualCubePos] = availableEdges[count];
+
+        for (int j = count; j < 5 - i; j++) {
+            availableEdges[j] = availableEdges[j + 1];
+        }
+    }
+
+	ep[activePositions[5]] = availableEdges[0];
+}
+
+
+int Cube::CalcEdgePositionIndex_2() {
+    int positionIndex = 0;
     int k = 6;
+    for (int i = 11; i >= 0 && k > 0; i--) {
+        if (ep[i] >= 6 && ep[i] <= 11) {
+            positionIndex += C[i][k];
+            k--;
+        }
+    }
+    return positionIndex;
+}
+void Cube::DecodeEdgePosition_2(int index, int* activePositions) {
+    int k = 6;
+
     for (int i = 11; i >= 0 && k > 0; --i)
     {
-        if (currentCombIdx >= C[i][k]) {
-            ocupiedEdges[k - 1] = i;
-            currentCombIdx -= C[i][k];
+        if (C[i][k] <= index)
+        {
+            activePositions[k - 1] = i;
+            index -= C[i][k];
             --k;
         }
     }
 
-
-    //recreate the edges premutation
-    int permutations[6] = {};
-
-    int numbers[6] = {0, 1, 2, 3, 4, 5};
-
-    int tempPerm = currentPermIdx;
-
-    //calculate the count of bigger numbers for each position in the permutation
-    for (int i = 0; i < 6; ++i)
-    {
-        int count = tempPerm / facts_6[i];
-        tempPerm %= facts_6[i];
-
-
-		permutations[i] = numbers[count];
-		//manually remove the used number from the list of available numbers
-        for (int j = count; j < 5 - i; ++j)
-        {
-            numbers[j] = numbers[j + 1];
-        }
-    }
-
-
-
-    // build cube based on the premutations and orientations
-    int cube_ep[12] = {};
-    int cube_eo[12] = {};
-    for (int i = 0; i < 12; i++) { cube_ep[i] = -1; cube_eo[i] = 0; }
-
-    for (int i = 0; i < 6; ++i)
-    {
-        cube_ep[ocupiedEdges[i]] = permutations[i];
-        cube_eo[ocupiedEdges[i]] = orientations[i];
-    }
-
-
-	//generate child states for each possible move
-    for (int m = 0; m < 18; ++m) {
-        int next_ep[12];
-        int next_eo[12];
-
-        // make move
-        for (int i = 0; i < 12; ++i) {
-            int src = EP_PERM[m][i];
-            next_ep[i] = cube_ep[src];
-
-			// update orientation if the edge is in the first group and the move affects its orientation
-            if (cube_ep[src] != -1) {
-                next_eo[i] = (cube_eo[src] + EO_ORI[m][i]) % 2;
-            }
-            else {
-                next_eo[i] = -1;
-            }
-        }
-
-		// identify the occupied edges, their permutations and orientations for the child state
-        int next_occupied[6] = {};
-        int next_permutations[6] = {};
-        int next_orientations[6] = {};
-        int found = 0;
-
-        for (int i = 0; i < 12; ++i) {
-            if (next_ep[i] >= 0 && next_ep[i] <= 5) {
-                next_occupied[found] = i;
-                next_permutations[found] = next_ep[i];
-                next_orientations[found] = next_eo[i];
-                ++found;
-            }
-        }
-
-        // caculate the index of the child state
-
-		//combination
-        int childComb = 0;
-        for (int i = 0; i < 6; ++i) {
-            childComb += C[next_occupied[i]][i + 1];
-        }
-
-		// permutation
-        int childPerm = 0;
-
-        for (int i = 0; i < 6; ++i) {
-            int count = 0;
-            for (int j = i + 1; j < 6; ++j) {
-                if (next_permutations[j] < next_permutations[i]) count++;
-            }
-            childPerm += count * facts_6[i];
-        }
-
-		// orientation
-        int childOri = 0;
-        int powerOf2 = 1;
-        for (int i = 0; i < 6; i++) {
-            childOri += next_orientations[i] * powerOf2;
-            powerOf2 *= 2;
-        }
-
-		// final index for the child state
-        int childIndex = (childComb * 720 + childPerm) * 64 + childOri;
-
-		// update index in PDB if not visited before
-        if (Cube::edges_pdb_1[childIndex] == 255) {
-            Cube::edges_pdb_1[childIndex] = turn + 1;
-        }
-    }
-
-
+    sort(activePositions, activePositions + 6);
 }
-void Cube::UpdateTurnForChildren_Edges2(int turn, int index) {
-    int currentOriIdx = index % 64;
-    int tempPosIdx = index / 64;
-    int currentPermIdx = tempPosIdx % 720;
-    int currentCombIdx = tempPosIdx / 720;
-
-    // find the edge orientation from the index
-    int orientations[6] = {};
-
-    for (int i = 0; i < 6; ++i)
-    {
-        orientations[i] = currentOriIdx % 2;
-        currentOriIdx /= 2;
-    }
-
-    // find the ocupied edges from the index
-    int ocupiedEdges[6] = {};
-    int k = 6;
-    for (int i = 11; i >= 0 && k > 0; --i)
-    {
-        if (currentCombIdx >= C[i][k]) {
-            ocupiedEdges[k - 1] = i;
-            currentCombIdx -= C[i][k];
-            --k;
-        }
-    }
-
-
-    //recreate the edges premutation
-    int permutations[6] = {};
-
-    int numbers[6] = { 6, 7, 8, 9, 10, 11 };
-
-    int tempPerm = currentPermIdx;
-
-    //calculate the count of bigger numbers for each position in the permutation
-    for (int i = 0; i < 6; ++i)
-    {
-        int count = tempPerm / facts_6[i];
-        tempPerm %= facts_6[i];
-
-        permutations[i] = numbers[count];
-
-		//manually remove the used number from the list of available numbers
-        for (int j = count; j < 5 - i; ++j)
-        {
-            numbers[j] = numbers[j + 1];
-        }
-    }
-
-
-
-    // build cube based on the premutations and orientations
-    int cube_ep[12] = {};
-    int cube_eo[12] = {};
-    for (int i = 0; i < 12; i++) { cube_ep[i] = -1; cube_eo[i] = 0; }
-
-    for (int i = 0; i < 6; ++i)
-    {
-        cube_ep[ocupiedEdges[i]] = permutations[i];
-        cube_eo[ocupiedEdges[i]] = orientations[i];
-    }
-
-
-    //generate child states for each possible move
-    for (int m = 0; m < 18; ++m) {
-        int next_ep[12];
-        int next_eo[12];
-
-        // make move
-        for (int i = 0; i < 12; ++i) {
-            int src = EP_PERM[m][i];
-            next_ep[i] = cube_ep[src];
-
-            // update orientation if the edge is in the first group and the move affects its orientation
-            if (cube_ep[src] != -1) {
-                next_eo[i] = (cube_eo[src] + EO_ORI[m][i]) % 2;
-            }
-            else {
-                next_eo[i] = -1;
-            }
-        }
-
-        // identify the occupied edges, their permutations and orientations for the child state
-        int next_occupied[6] = {};
-        int next_permutations[6] = {};
-        int next_orientations[6] = {};
-        int found = 0;
-
-        for (int i = 0; i < 12; ++i) {
-            if (next_ep[i] >= 6 && next_ep[i] <= 11) {
-                next_occupied[found] = i;
-                next_permutations[found] = next_ep[i] - 6;
-                next_orientations[found] = next_eo[i];
-                found++;
-            }
-        }
-
-        // caculate the index of the child state
-
-        //combination
-        int childComb = 0;
-        for (int i = 0; i < 6; ++i) {
-            childComb += C[next_occupied[i]][i + 1];
-        }
-
-        // permutation
-        int childPerm = 0;
-
-        for (int i = 0; i < 6; ++i) {
-            int count = 0;
-            for (int j = i + 1; j < 6; ++j) {
-                if (next_permutations[j] < next_permutations[i]) count++;
-            }
-            childPerm += count * facts_6[i];
-        }
-
-        // orientation
-        int childOri = 0;
-        int powerOf2 = 1;
-        for (int i = 0; i < 6; i++) {
-            childOri += next_orientations[i] * powerOf2;
-            powerOf2 *= 2;
-        }
-
-        // final index for the child state
-        int childIndex = (childComb * 720 + childPerm) * 64 + childOri;
-
-        // update index in PDB if not visited before
-        if (Cube::edges_pdb_2[childIndex] == 255) {
-            Cube::edges_pdb_2[childIndex] = turn + 1;
-        }
-    }
-}
-
 
 void Cube::PDB_BFS_EDGES_1() {
     bool foundNew = true;
@@ -969,7 +950,15 @@ void Cube::PDB_BFS_EDGES_1() {
         for (int i = 0; i < EDGES_PDB_SIZE; ++i)
         {
             if (Cube::edges_pdb_1[i] == turn) {
-                Cube::UpdateTurnForChildren_Edges1(turn, i);
+
+                for (int move = 0; move < 18; ++move)
+                {
+                    int nextIndex = Edges1_MoveTable[i][move];
+                    if (Cube::edges_pdb_1[nextIndex] == 255) {
+                        Cube::edges_pdb_1[nextIndex] = (unsigned char)(turn + 1);
+                    }
+				}
+
                 foundNew = true;
             }
         }
@@ -998,7 +987,15 @@ void Cube::PDB_BFS_EDGES_2() {
         for (int i = 0; i < EDGES_PDB_SIZE; ++i)
     {
             if (Cube::edges_pdb_2[i] == turn) {
-                Cube::UpdateTurnForChildren_Edges2(turn, i);
+                
+                for (int move = 0; move < 18; ++move)
+                {
+                    int nextIndex = Edges2_MoveTable[i][move];
+                    if (Cube::edges_pdb_2[nextIndex] == 255) {
+                        Cube::edges_pdb_2[nextIndex] = (unsigned char)(turn + 1);
+                    }
+				}
+
                 foundNew = true;
             }
         }
@@ -1054,26 +1051,11 @@ pair<int, int> Cube::IdentifyEdge(const char mat[6][CUBESIZE][CUBESIZE], int pos
 }
 
 // solution
-bool Cube::IsSolved() const {
-    for (int i = 0; i < 8; i++) {
-        if (cp[i] != i || co[i] != 0) {
-            return false;
-        }
-    }
 
-    for (int i = 0; i < 12; i++) {
-        if (ep[i] != i || eo[i] != 0) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-int Cube::GetHeuristic() {
-    int h_corners = corners_pdb[this->CalcCornerIndex()];
-    int h_edges1 = edges_pdb_1[this->CalcEdgesIndex_1()];
-    int h_edges2 = edges_pdb_2[this->CalcEdgesIndex_2()];
+int Cube::GetHeuristic(int cpIdx, int coIdx, int e1Idx, int e2Idx) {
+    int h_corners = corners_pdb[cpIdx * 2187 + coIdx];
+    int h_edges1 = edges_pdb_1[e1Idx];
+    int h_edges2 = edges_pdb_2[e2Idx];
 
     int h = h_corners;
     if (h_edges1 > h) h = h_edges1;
@@ -1092,30 +1074,56 @@ bool Cube::ShouldSkipMove(int currentFace, int lastFace) {
     return false;
 }
 
-bool Cube::SolveHelper(int turn, int limit, int lastFace) {
-    int h = GetHeuristic();
+bool Cube::SolveHelper(int turn, int limit, int lastFace, int cpIdx, int coIdx, int e1Idx, int e2Idx) {
+    for (int move = 0; move < 18; ++move)
+    {
+        int face = move / 3;
+		if (ShouldSkipMove(face, lastFace)) continue;
 
-    if (turn + h > limit) return false;
-    if (this->IsSolved()) return true;
+		// calculate the next state indices using the move tables
+		int cpNext = CP_MoveTable[cpIdx][move];
+        int coNext = CO_MoveTable[coIdx][move];
+		int h_corners = corners_pdb[cpNext * 2187 + coNext];
 
-    for (int f = 0; f < 6; f++) {
-        if (f == lastFace) continue;
-        if (ShouldSkipMove(f, lastFace)) continue;
+		// early pruning: if the heuristic for the corners alone exceeds the remaining depth, skip this move
+        if (turn + 1 + h_corners > limit) continue;
 
-        for (int t = 1; t <= 3; t++) {
-            ApplyMove(f, t);
-			steps[turn] = f * 3 + (t - 1) + 1; // Store the move (1-18) in the steps array
+		// calculate the next state indices for first edges set and check heuristic
+        int edges_1_next = Edges1_MoveTable[e1Idx][move];
+        int h_edges1 = edges_pdb_1[edges_1_next];
 
-            if (SolveHelper(turn + 1, limit, f)) return true;
+		// early pruning: if the heuristic for the first edges set alone exceeds the remaining depth, skip this move
+        if (turn + 1 + h_edges1 > limit) continue;
 
-            ApplyMove(f, 4 - t); // Undo
+		// calculate the next state indices for second edges set and check heuristic
+        int edges_2_next = Edges2_MoveTable[e2Idx][move];
+        int h_edges2 = edges_pdb_2[edges_2_next];
+
+		// early pruning: if the heuristic for the second edges set alone exceeds the remaining depth, skip this move
+        if (turn + 1 + h_edges2 > limit) continue;
+
+
+		// if we reach this point, it means this move is worth exploring further, so we record it in the steps array
+        steps[turn] = move + 1;
+
+		// if this move leads to a solution, return true
+        if (turn + 1 == limit && h_corners == 0 && h_edges1 == 0 && h_edges2 == 0) {
+            return true;
+        }
+
+		// apply move and continue searching
+        if (turn + 1 < limit) {
+            if (SolveHelper(turn + 1, limit, face, cpNext, coNext, edges_1_next, edges_2_next)) {
+                return true;
+            }
         }
     }
-    return false;
+
+	return false;
 }
 vector<int> Cube::Solve(int limit) {
 
-	/*Cube::CreatePdb();
+   /* Cube::CreatePdb();
     Cube().PDB_BFS_CORNERS();
     cout << "Finished corners PDB" << endl;
     Cube().PDB_BFS_EDGES_1();
@@ -1124,13 +1132,19 @@ vector<int> Cube::Solve(int limit) {
     cout << "Finished edges 2 PDB" << endl;*/
 
     Cube::LoadPdb();
-    int initial_h = GetHeuristic();
+
+    int cp = CalcCornerPermutationIndex();
+    int co = CalcCornerOrientationIndex();
+    int e1 = CalcEdgesIndex_1();
+    int e2 = CalcEdgesIndex_2();
+
+    int initial_h = GetHeuristic(cp, co, e1, e2);
     cout << "Initial Heuristic (Minimum steps required): " << initial_h << endl;
     cout << endl << "Solving..." << endl;
 
     for (int limit = initial_h; limit <= 20; limit++) {
         cout << "Searching depth " << limit << "..." << endl;
-           if (SolveHelper(0, limit, -1)) {
+           if (SolveHelper(0, limit, -1, cp, co, e1, e2)) {
             return steps;
         }
     }

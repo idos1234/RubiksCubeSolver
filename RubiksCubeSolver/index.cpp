@@ -2,12 +2,20 @@
 #include <chrono>
 #include <thread>
 
-#define SCRAMBLE_MOVES 14
+#define SCRAMBLE_MOVES 15
 
 int main() {
-	Cube::InitMoveTables();
 	precomputeCombinations();
 
+	Cube::InitMoveTables();
+	Cube::GenerateCOMoveTable();
+	Cube::GenerateCPMoveTable();
+
+	//one time only
+	/*Cube::GenerateEdges1MoveTable();
+	cout << "Finished generating edges 1 move table" << endl;
+	Cube::GenerateEdges2MoveTable();
+	cout << "Finished generating edges 2 move table" << endl;*/
 
 	char cubeMat[6][CUBESIZE][CUBESIZE] = {
 		{
